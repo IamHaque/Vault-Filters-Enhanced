@@ -85,4 +85,24 @@ public class MixinFilterMenu implements FilterMenuAdvancedAccessor {
     public void vault_filters$setMatchAll(boolean matchAll) {
         this.vf$matchAll = matchAll;
     }
+
+    @Override
+    public boolean vault_filters$isBlacklist() {
+        return blacklist;
+    }
+
+    @Override
+    public void vault_filters$setBlacklist(boolean blacklist) {
+        this.blacklist = blacklist;
+    }
+
+    @Override
+    public boolean vault_filters$shouldRespectNBT() {
+        return respectNBT;
+    }
+
+    @Override
+    public void vault_filters$setRespectNBT(boolean respectNBT) {
+        this.respectNBT = respectNBT;
+    }
 }

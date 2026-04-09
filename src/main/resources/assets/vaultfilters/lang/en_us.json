@@ -56,10 +56,8 @@
   "create.item_attributes.size": "is a jewel with at most \"%1$s\" size",
   "create.item_attributes.size.inverted": "is not a jewel with at most \"%1$s\"",
 
-
   "create.item_attributes.implicit": "has a \"%1$s\" implicit",
   "create.item_attributes.implicit.inverted": "doesn't have a \"%1$s\" implicit",
-
 
   "create.item_attributes.prefix": "has a \"%1$s\" prefix",
   "create.item_attributes.prefix.inverted": "doesn't have a \"%1$s\" prefix",
@@ -127,10 +125,8 @@
   "create.item_attributes.corrupted_implicit": "has a corrupted \"%1$s\" implicit",
   "create.item_attributes.corrupted_implicit.inverted": "doesn't have a corrupted \"%1$s\" implicit",
 
-
   "create.item_attributes.legendary_suffix": "has a legendary \"%1$s\" suffix",
   "create.item_attributes.legendary_suffix.inverted": "doesn't have a legendary \"%1$s\" suffix",
-
 
   "create.item_attributes.inscription_room": "adds a \"%1$s\" room",
   "create.item_attributes.inscription_room.inverted": "doesn't add a \"%1$s\" room",
@@ -167,7 +163,6 @@
 
   "create.item_attributes.suffix_number": "has a suffix that adds at least \"%1$s\"",
   "create.item_attributes.suffix_number.inverted": "doesn't have a suffix that adds at least \"%1$s\"",
-
 
   "create.item_attributes.modifier_group_single": "has an affix in group \"%1$s\"",
   "create.item_attributes.modifier_group_single.inverted": "doesn't have an affix in group \"%1$s\"",
@@ -279,16 +274,16 @@
 
   "create.item_attributes.boss_rune_modifier": "is a rune with modifier \"%1$s\"",
   "create.item_attributes.boss_rune_modifier.inverted": "is not a rune with modifier \"%1$s\"",
-  
+
   "create.item_attributes.boss_rune_gives_item": "is a rune that gives \"%1$s\"",
   "create.item_attributes.boss_rune_gives_item.inverted": "is not a rune that gives \"%1$s\"",
 
   "create.item_attributes.boss_rune_gear_rarity": "is a rune that gives \"%1$s\" gear",
   "create.item_attributes.boss_rune_gear_rarity.inverted": "is not a rune that gives \"%1$s\" gear",
-  
+
   "create.item_attributes.boss_rune_booster_pack_type": "is a rune that gives a \"%1$s\" card pack",
   "create.item_attributes.boss_rune_booster_pack_type.inverted": "is not a rune that gives a \"%1$s\" card pack",
-  
+
   "create.item_attributes.boss_rune_inscription_type": "is a rune that gives a \"%1$s\" type inscription",
   "create.item_attributes.boss_rune_inscription_type.inverted": "is not a rune that gives a \"%1$s\" type inscription",
 
@@ -369,5 +364,32 @@
   "item.vaultfilters.jewel_pouch_augment": "Jewel Pouch Opener Augment",
   "modularrouters.itemText.usage.item.jewel_pouch_augment": "For use in an activator module. \nActivation on a Jewel Pouch will select the first Jewel that matches the filter if there is one.",
   "item.vaultfilters.card_pack_augment": "Card Pack Opener Augment",
-  "modularrouters.itemText.usage.item.card_pack_augment": "For use in an activator module. \nActivation on a Card Pack will select the first Card that matches the filter if there is one."
+  "modularrouters.itemText.usage.item.card_pack_augment": "For use in an activator module. \nActivation on a Card Pack will select the first Card that matches the filter if there is one.",
+
+  "vaultfilters.gui.attribute_filter.export": "Export",
+  "vaultfilters.gui.attribute_filter.import": "Import",
+  "vaultfilters.gui.attribute_filter.export_available": "Export Available",
+  "vaultfilters.gui.attribute_filter.export.tooltip": "Copy current filter as import JSON",
+  "vaultfilters.gui.attribute_filter.export.tooltip.shift": "Shift: pretty-print JSON",
+  "vaultfilters.gui.attribute_filter.import.tooltip": "Import filter JSON from clipboard",
+  "vaultfilters.gui.attribute_filter.import.tooltip.shift": "Shift: merge with current filter",
+  "vaultfilters.gui.attribute_filter.export_available.tooltip": "Export all available attributes for this item",
+  "vaultfilters.gui.attribute_filter.exported": "Exported %1$s attributes to clipboard",
+  "vaultfilters.gui.attribute_filter.imported": "Imported %1$s attributes (%2$s invalid, %3$s duplicates skipped, mode: %4$s)",
+  "vaultfilters.gui.attribute_filter.export_available.copied": "Copied %1$s available attributes to clipboard",
+  "vaultfilters.gui.attribute_filter.hint": "Tip: Shift+Export = pretty JSON, Shift+Import = merge mode",
+  "vaultfilters.gui.attribute_filter.import.empty": "Clipboard is empty",
+  "vaultfilters.gui.attribute_filter.import.version": "Unsupported payload format: %1$s",
+  "vaultfilters.gui.attribute_filter.import.invalid": "Clipboard does not contain a valid filter payload",
+  "vaultfilters.gui.attribute_filter.import.none": "No valid attributes were found in clipboard data",
+
+  "vaultfilters.gui.list_filter.export": "Export",
+  "vaultfilters.gui.list_filter.import": "Import",
+  "vaultfilters.gui.list_filter.exported": "Exported %1$s filters to clipboard",
+  "vaultfilters.gui.list_filter.imported": "Imported %1$s filters",
+  "vaultfilters.gui.list_filter.hint": "Tip: Shift+Export = pretty JSON, Shift+Import = merge mode",
+  "vaultfilters.gui.list_filter.import.empty": "Clipboard is empty",
+  "vaultfilters.gui.list_filter.import.version": "Unsupported list filter format",
+  "vaultfilters.gui.list_filter.import.invalid": "Clipboard does not contain a valid list filter payload",
+  "vaultfilters.gui.list_filter.import.none": "No valid filters were found in clipboard data"
 }
