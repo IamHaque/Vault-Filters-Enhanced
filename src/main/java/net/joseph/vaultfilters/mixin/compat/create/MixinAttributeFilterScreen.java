@@ -172,8 +172,6 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
         addRenderableWidget(vault_Filters$exportAvailableButton);
-
-        vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.hint").withStyle(ChatFormatting.GRAY));
     }
     @Inject(method = "handleAddedAttibute", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z"))
     private void rmDelTooltipLine(boolean inverted, CallbackInfoReturnable<Boolean> cir) {
@@ -277,6 +275,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
         JsonObject root = new JsonObject();
         root.addProperty(vault_Filters$FORMAT_FIELD, vault_Filters$FORMAT_KEY);
+        root.addProperty("isBlacklist", vault_Filters$isAttributeFilterBlacklist());
         String currentName = vault_Filters$getCurrentFilterName();
         if (currentName != null && !currentName.isEmpty()) {
             root.addProperty("name", currentName);
@@ -309,6 +308,8 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
         JsonArray array;
         String importedName = null;
+        boolean hasImportedBlacklist = false;
+        boolean importedBlacklist = false;
         try {
             JsonElement parsed = JsonParser.parseString(clipboard);
             if (parsed.isJsonObject()) {
@@ -326,6 +327,10 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                 }
                 if (root.has("name") && root.get("name").isJsonPrimitive()) {
                     importedName = root.get("name").getAsString();
+                }
+                if (root.has("isBlacklist") && root.get("isBlacklist").isJsonPrimitive()) {
+                    hasImportedBlacklist = true;
+                    importedBlacklist = root.get("isBlacklist").getAsBoolean();
                 }
                 array = root.getAsJsonArray(vault_Filters$ATTRIBUTES_KEY);
             } else if (parsed.isJsonArray()) {
@@ -397,13 +402,22 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             vault_Filters$applyImportedFilterName(importedName);
         }
 
+        if (hasImportedBlacklist) {
+            vault_Filters$setAttributeFilterBlacklist(importedBlacklist);
+            AllPackets.getChannel().sendToServer(new FilterScreenPacket(importedBlacklist ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST, new CompoundTag()));
+        }
+
         int applied = 0;
         for (Pair<ItemAttribute, Boolean> pair : imported) {
             this.vault_Filters$addAttr(pair.getFirst(), pair.getSecond());
             applied++;
         }
 
-        vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.imported", applied, invalid, duplicates, merge ? "merge" : "replace").withStyle(ChatFormatting.GREEN));
+        if (merge) {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.imported.merge", applied, invalid, duplicates).withStyle(ChatFormatting.GREEN));
+        } else {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.imported.replace", applied, invalid, duplicates).withStyle(ChatFormatting.GREEN));
+        }
     }
 
     @Unique
@@ -469,5 +483,21 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
         String defaultName = new ItemStack(contentHolder.getItem()).getHoverName().getString();
         return !normalizedName.equals(defaultName);
+    }
+
+    @Unique
+    private boolean vault_Filters$isAttributeFilterBlacklist() {
+        ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
+        CompoundTag tag = contentHolder.getTag();
+        if (tag == null || !tag.contains("WhitelistMode")) {
+            return false;
+        }
+        return !tag.getBoolean("WhitelistMode");
+    }
+
+    @Unique
+    private void vault_Filters$setAttributeFilterBlacklist(boolean blacklist) {
+        ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
+        contentHolder.getOrCreateTag().putBoolean("WhitelistMode", !blacklist);
     }
 }

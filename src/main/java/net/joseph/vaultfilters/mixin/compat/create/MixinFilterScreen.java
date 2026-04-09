@@ -134,8 +134,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
-
-        vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.hint").withStyle(ChatFormatting.GRAY));
     }
 
     @Inject(method = "getTooltipButtons", at = @At("HEAD"), cancellable = true)
@@ -256,9 +254,11 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             }
 
             JsonObject root = parsed.getAsJsonObject();
-            if (!root.has("format") || !vault_Filters$LIST_FORMAT_KEY.equals(root.get("format").getAsString())) {
-                vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.version").withStyle(ChatFormatting.RED));
-                return;
+            if (root.has("format")) {
+                if (!root.get("format").isJsonPrimitive() || !vault_Filters$LIST_FORMAT_KEY.equals(root.get("format").getAsString())) {
+                    vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.version").withStyle(ChatFormatting.RED));
+                    return;
+                }
             }
 
             String importedName = null;
@@ -277,45 +277,64 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 return;
             }
 
-            if (!merge) {
-                this.menu.clearContents();
+            boolean hasIsBlacklist = filterObj.has("isBlacklist") && filterObj.get("isBlacklist").isJsonPrimitive();
+            boolean hasShouldRespectNBT = filterObj.has("shouldRespectNBT") && filterObj.get("shouldRespectNBT").isJsonPrimitive();
+            boolean hasMatchAll = filterObj.has("matchAll") && filterObj.get("matchAll").isJsonPrimitive();
+            boolean isBlacklist = hasIsBlacklist && filterObj.get("isBlacklist").getAsBoolean();
+            boolean shouldRespectNBT = hasShouldRespectNBT && filterObj.get("shouldRespectNBT").getAsBoolean();
+            boolean matchAll = hasMatchAll && filterObj.get("matchAll").getAsBoolean();
 
-                boolean isBlacklist = filterObj.has("isBlacklist") && filterObj.get("isBlacklist").isJsonPrimitive() && filterObj.get("isBlacklist").getAsBoolean();
-                boolean shouldRespectNBT = filterObj.has("shouldRespectNBT") && filterObj.get("shouldRespectNBT").isJsonPrimitive() && filterObj.get("shouldRespectNBT").getAsBoolean();
-                boolean matchAll = filterObj.has("matchAll") && filterObj.get("matchAll").isJsonPrimitive() && filterObj.get("matchAll").getAsBoolean();
+            JsonArray items = filterObj.getAsJsonArray("items");
+            ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
+            ItemStackHandler handler = FilterItem.getFilterItems(contentHolder);
+            int slotCount = handler.getSlots();
 
+            List<CompoundTag> importTags = new ArrayList<>();
+            int invalid = 0;
+            for (JsonElement elem : items) {
+                if (!elem.isJsonObject()) {
+                    invalid++;
+                    continue;
+                }
+                CompoundTag tag = vault_Filters$buildFilterTagFromJson(elem.getAsJsonObject());
+                if (tag != null) {
+                    importTags.add(tag);
+                } else {
+                    invalid++;
+                }
+            }
+
+            if (importTags.isEmpty()) {
+                vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.none").withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            if (hasIsBlacklist) {
                 menuAccessor.vault_filters$setBlacklist(isBlacklist);
-                menuAccessor.vault_filters$setRespectNBT(shouldRespectNBT);
                 AllPackets.getChannel().sendToServer(new FilterScreenPacket(isBlacklist ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST, new CompoundTag()));
+            }
+            if (hasShouldRespectNBT) {
+                menuAccessor.vault_filters$setRespectNBT(shouldRespectNBT);
                 AllPackets.getChannel().sendToServer(new FilterScreenPacket(shouldRespectNBT ? FilterScreenPacket.Option.RESPECT_DATA : FilterScreenPacket.Option.IGNORE_DATA, new CompoundTag()));
+            }
+            if (hasMatchAll) {
                 menuAccessor.vault_filters$setMatchAll(matchAll);
                 VFMessages.VFCHANNEL.sendToServer(new MenuFeaturesPacket(matchAll ? MenuFeaturesPacket.MenuAction.MATCH_ALL : MenuFeaturesPacket.MenuAction.MATCH_ANY));
+            }
+
+            if (!merge) {
+                this.menu.clearContents();
             }
 
             if (importedName != null) {
                 vault_Filters$applyImportedFilterName(importedName);
             }
-            JsonArray items = filterObj.getAsJsonArray("items");
-            ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
-            ItemStackHandler handler = FilterItem.getFilterItems(contentHolder);
-            int slotCount = handler.getSlots();
 
             if (!merge) {
                 CompoundTag emptyTag = ItemStack.EMPTY.serializeNBT();
                 for (int slot = 0; slot < slotCount; slot++) {
                     vault_Filters$sendFilterSlotUpdate(slot, emptyTag);
                     handler.setStackInSlot(slot, ItemStack.EMPTY);
-                }
-            }
-
-            List<CompoundTag> importTags = new ArrayList<>();
-            for (JsonElement elem : items) {
-                if (!elem.isJsonObject()) {
-                    continue;
-                }
-                CompoundTag tag = vault_Filters$buildFilterTagFromJson(elem.getAsJsonObject());
-                if (tag != null) {
-                    importTags.add(tag);
                 }
             }
 
@@ -340,7 +359,11 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 return;
             }
 
-            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.imported", imported).withStyle(ChatFormatting.GREEN));
+            if (merge) {
+                vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.imported.merge", imported, invalid).withStyle(ChatFormatting.GREEN));
+            } else {
+                vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.imported.replace", imported, invalid).withStyle(ChatFormatting.GREEN));
+            }
         } catch (Exception ignored) {
             vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
         }
