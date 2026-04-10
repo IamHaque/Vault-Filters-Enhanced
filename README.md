@@ -137,16 +137,17 @@ You can now share and reuse full attribute filter setups without needing to phys
 - **Import**: Reads JSON from your clipboard and applies it to the filter.
 - **Export Available**: Copies all available attributes for the currently selected item to your clipboard as a JSON payload (useful for discovering all possible attributes without manual construction).
 
-### Power-user options
+### Power-user options (List Filters)
 
 - **Shift + Export**: Exports pretty-printed JSON (human-readable).
 - **Shift + Import**: Imports in **merge mode** (adds onto current attributes instead of replacing them).
 - **Shift + Export Available**: Exports available attributes as pretty-printed JSON.
 
-### Import behavior
+### Import behavior (List Filters)
 
 - Normal Import replaces existing attributes in the filter.
 - Shift Import merges imported attributes into current ones.
+- Top-level `isBlacklist` is exported/imported for attribute filters when present.
 - Duplicate entries in the payload are skipped.
 - Invalid entries are ignored and reported.
 - Payload format/version is validated.
@@ -161,11 +162,12 @@ You can now share and reuse full attribute filter setups without needing to phys
 4. Click **Import** on another filter to apply it.
 5. Alternatively, build a filter manually and click **Export** to share it.
 
-### Payload format (canonical)
+### Payload format (canonical, List Filters)
 
 ```json
 {
   "format": "vaultfilters.attribute_filter.v1",
+  "isBlacklist": false,
   "name": "My Gear Attr Filter",
   "attributes": [
     {
@@ -179,6 +181,7 @@ You can now share and reuse full attribute filter setups without needing to phys
 Notes:
 
 - `name` is optional. If omitted, blank, or default item name, import keeps the current filter name.
+- `isBlacklist` is optional on import. If provided, it applies allow/deny mode (`false` = whitelist, `true` = blacklist).
 - `inverted` corresponds to negated attributes (blacklist-style condition for that entry).
 - `nbt` is the serialized Create/Vault Filters attribute payload.
 - For best compatibility, always use payloads generated via **Export**.
@@ -194,15 +197,18 @@ List filters now support full **Import / Export** actions in their UI, including
 
 ### Power-user options
 
-- **Shift + Export**: Exports pretty-printed JSON.
+- **Export**: Exports pretty-printed compact JSON (`vaultfilters.list_filter.v2`).
+- **Shift + Export**: Exports minified compact JSON (`vaultfilters.list_filter.v2`).
+- **Ctrl + Shift + Export**: Exports legacy raw JSON (`vaultfilters.list_filter.v1`) including list-level `nbt` blobs.
 - **Shift + Import**: Imports in **merge mode** (appends to open slots instead of replacing all slots).
 
 ### Import behavior
 
 - Normal Import clears existing list slots, then applies imported entries.
+- If no valid imported entries are found, existing list contents are left unchanged.
 - Shift Import merges into first available empty slots.
 - Supports nested `list_filter` and `attribute_filter` entries (recursive payloads).
-- Top-level list settings are exported/imported:
+- Top-level list settings are exported/imported and applied when present (both replace and merge imports):
   - `isBlacklist` (allow/deny mode)
   - `shouldRespectNBT` (ignore/respect data)
   - `matchAll` (AND/OR mode)
@@ -213,7 +219,7 @@ List filters now support full **Import / Export** actions in their UI, including
 
 ```json
 {
-  "format": "vaultfilters.list_filter.v1",
+  "format": "vaultfilters.list_filter.v2",
   "name": "My Master Filter",
   "filter": {
     "isBlacklist": false,
@@ -236,8 +242,14 @@ List filters now support full **Import / Export** actions in their UI, including
 Notes:
 
 - `name` is optional and follows the same apply rules as attribute filters.
+- `format` is optional on import. If present, it may be `vaultfilters.list_filter.v2` (compact) or `vaultfilters.list_filter.v1` (legacy).
 - `items` are imported into list slots in order, up to available capacity.
 - For best compatibility, use payloads produced by in-game **Export**.
+
+Compact export notes:
+
+- List filter entries are exported without redundant list-level `nbt` blobs.
+- Nested structure (`type`, list options, and `items`) remains the source of truth for list filters.
 
 Due to these changes and the compatibility additions, create is no longer a requirement to use this mod.
 

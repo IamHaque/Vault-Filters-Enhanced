@@ -49,6 +49,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -58,16 +59,22 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     @Unique
     private static final Gson vault_Filters$GSON = new GsonBuilder().disableHtmlEscaping().create();
     @Unique
+    private static final Gson vault_Filters$PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+    @Unique
     private static final String vault_Filters$FORMAT_KEY = "vaultfilters.attribute_filter.v1";
     @Unique
     private static final String vault_Filters$ATTRIBUTES_KEY = "attributes";
     @Unique
     private static final String vault_Filters$FORMAT_FIELD = "format";
+    @Unique
+    private static final int vault_Filters$MAX_IMPORT_CHARS = 262_144;
 
     @Unique
     private Button vault_Filters$exportButton;
     @Unique
     private Button vault_Filters$importButton;
+    @Unique
+    private Button vault_Filters$exportTreeButton;
     @Unique
     private Button vault_Filters$exportAvailableButton;
 
@@ -154,21 +161,26 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             this.selectedAttributes.add(vault_Filters$delTooltipLine);
         }
 
-        int x = leftPos + this.background.width - 190;
+        int x = leftPos + this.background.width - 236;
         int y = topPos - 26;
 
-        vault_Filters$exportButton = new Button(x, y, 42, 18,
+        vault_Filters$exportTreeButton = new Button(x, y, 42, 18,
+            new TranslatableComponent("vaultfilters.gui.attribute_filter.export_tree"),
+            button -> vault_Filters$exportTreeToClipboard());
+
+        vault_Filters$exportButton = new Button(x + 46, y, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.export"),
                 button -> vault_Filters$exportToClipboard());
 
-        vault_Filters$importButton = new Button(x + 46, y, 42, 18,
+        vault_Filters$importButton = new Button(x + 92, y, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.import"),
                 button -> vault_Filters$importFromClipboard());
 
-        vault_Filters$exportAvailableButton = new Button(x + 92, y, 90, 18,
+        vault_Filters$exportAvailableButton = new Button(x + 138, y, 90, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available"),
                 button -> vault_Filters$exportAvailableAttributes());
 
+        addRenderableWidget(vault_Filters$exportTreeButton);
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
         addRenderableWidget(vault_Filters$exportAvailableButton);
@@ -271,7 +283,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$exportToClipboard() {
-        boolean pretty = Screen.hasShiftDown();
+        boolean pretty = vault_Filters$isShiftDownSafe();
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
         JsonObject root = new JsonObject();
         root.addProperty(vault_Filters$FORMAT_FIELD, vault_Filters$FORMAT_KEY);
@@ -292,17 +304,25 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         }
 
         root.add(vault_Filters$ATTRIBUTES_KEY, attributes);
-        String exportJson = pretty ? new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(root) : vault_Filters$GSON.toJson(root);
-        Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-        vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+        try {
+            String exportJson = pretty ? vault_Filters$PRETTY_GSON.toJson(root) : vault_Filters$GSON.toJson(root);
+            Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception ignored) {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
+        }
     }
 
     @Unique
     private void vault_Filters$importFromClipboard() {
-        boolean merge = Screen.hasShiftDown();
+        boolean merge = vault_Filters$isShiftDownSafe();
         String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
         if (clipboard == null || clipboard.isBlank()) {
             vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.empty").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (clipboard.length() > vault_Filters$MAX_IMPORT_CHARS) {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.too_large", vault_Filters$MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
             return;
         }
 
@@ -422,7 +442,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$exportAvailableAttributes() {
-        boolean pretty = Screen.hasShiftDown();
+        boolean pretty = vault_Filters$isShiftDownSafe();
         JsonObject root = new JsonObject();
         root.addProperty(vault_Filters$FORMAT_FIELD, vault_Filters$FORMAT_KEY);
         JsonArray attributes = new JsonArray();
@@ -437,9 +457,135 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         }
 
         root.add(vault_Filters$ATTRIBUTES_KEY, attributes);
-        String exportJson = pretty ? new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(root) : vault_Filters$GSON.toJson(root);
-        Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-        vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+        try {
+            String exportJson = pretty ? vault_Filters$PRETTY_GSON.toJson(root) : vault_Filters$GSON.toJson(root);
+            Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception ignored) {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$exportTreeToClipboard() {
+        try {
+            List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
+            StringBuilder tree = new StringBuilder();
+
+            String rootName = vault_Filters$getCurrentFilterName();
+            if (rootName == null || rootName.isBlank()) {
+                rootName = "Attribute Filter";
+            }
+
+            tree.append(rootName)
+                    .append(" (")
+                    .append(vault_Filters$isAttributeFilterBlacklist() ? "Deny" : "Allow")
+                    .append(")\n");
+
+            for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
+                CompoundTag tag = new CompoundTag();
+                pair.getFirst().serializeNBT(tag);
+                vault_Filters$appendAttributeTreeLine(tree, tag, pair.getSecond());
+            }
+
+            Minecraft.getInstance().keyboardHandler.setClipboard(tree.toString());
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.tree", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception ignored) {
+            vault_Filters$notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$appendAttributeTreeLine(StringBuilder tree, CompoundTag tag, boolean inverted) {
+        String key = null;
+        Tag valueTag = null;
+        List<String> keys = new ArrayList<>();
+        for (String candidate : tag.getAllKeys()) {
+            keys.add(candidate);
+        }
+        if (!keys.isEmpty()) {
+            Collections.sort(keys);
+            key = keys.get(0);
+            valueTag = tag.get(key);
+        }
+
+        tree.append("  - ");
+        if (inverted) {
+            tree.append("NOT ");
+        }
+
+        if (key == null || valueTag == null) {
+            tree.append("unknown = <invalid>");
+        } else {
+            tree.append(key)
+                    .append(" = ")
+                    .append(vault_Filters$normalizeAttributeSummary(key, vault_Filters$summarizeTag(valueTag)));
+        }
+
+        tree.append("\n");
+    }
+
+    @Unique
+    private String vault_Filters$normalizeAttributeSummary(String key, String summary) {
+        if (summary == null || summary.isBlank() || key == null || key.isBlank()) {
+            return summary;
+        }
+
+        String prefix = key + "=";
+        if (summary.startsWith(prefix)) {
+            return summary.substring(prefix.length());
+        }
+
+        return summary;
+    }
+
+    @Unique
+    private String vault_Filters$summarizeTag(Tag tag) {
+        if (tag == null) {
+            return "<null>";
+        }
+
+        if (tag instanceof CompoundTag compound) {
+            StringBuilder sb = new StringBuilder();
+            int shown = 0;
+            for (String key : compound.getAllKeys()) {
+                if (shown == 3) {
+                    sb.append(", ...");
+                    break;
+                }
+                if (shown > 0) {
+                    sb.append(", ");
+                }
+                sb.append(key).append(" = ").append(vault_Filters$summarizeTag(compound.get(key)));
+                shown++;
+            }
+            return sb.length() == 0 ? "{}" : sb.toString();
+        }
+
+        if (tag instanceof ListTag list) {
+            StringBuilder sb = new StringBuilder("[");
+            int shown = Math.min(3, list.size());
+            for (int i = 0; i < shown; i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+                sb.append(vault_Filters$summarizeTag(list.get(i)));
+            }
+            if (list.size() > shown) {
+                sb.append(", ...");
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+
+        String text = tag.getAsString();
+        if (text == null || text.isBlank()) {
+            text = tag.toString();
+        }
+        if (text.length() > 120) {
+            return text.substring(0, 117) + "...";
+        }
+        return text;
     }
 
     @Unique
@@ -499,5 +645,14 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     private void vault_Filters$setAttributeFilterBlacklist(boolean blacklist) {
         ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
         contentHolder.getOrCreateTag().putBoolean("WhitelistMode", !blacklist);
+    }
+
+    @Unique
+    private boolean vault_Filters$isShiftDownSafe() {
+        try {
+            return Screen.hasShiftDown();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 }
