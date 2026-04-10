@@ -124,8 +124,8 @@ But you can of course choose different parameters during selection in the filter
 
 - The attribute and list filters from the Create mod no longer require the Create mod to be researched for crafting and use.
 - The attribute filter now requires gold nuggets instead of brass nuggets to craft.
-- Attribute filters now support **Import / Export / Export Available** actions directly in the filter UI.
-- List filters now support **Import / Export** actions in their UI.
+- Attribute filters now support **Tree / Import / Export / Export Available** actions directly in the filter UI.
+- List filters now support **Tree / Import / Export** actions in their UI.
 
 ## Attribute Filter Import / Export
 
@@ -133,17 +133,18 @@ You can now share and reuse full attribute filter setups without needing to phys
 
 ### Buttons in the Attribute Filter UI
 
+- **Tree**: Copies the current attribute filter to clipboard as a readable tree view.
 - **Export**: Copies the current filter attributes to your clipboard as JSON.
 - **Import**: Reads JSON from your clipboard and applies it to the filter.
 - **Export Available**: Copies all available attributes for the currently selected item to your clipboard as a JSON payload (useful for discovering all possible attributes without manual construction).
 
-### Power-user options (List Filters)
+### Power-user options (Attribute Filters)
 
 - **Shift + Export**: Exports pretty-printed JSON (human-readable).
 - **Shift + Import**: Imports in **merge mode** (adds onto current attributes instead of replacing them).
 - **Shift + Export Available**: Exports available attributes as pretty-printed JSON.
 
-### Import behavior (List Filters)
+### Import behavior (Attribute Filters)
 
 - Normal Import replaces existing attributes in the filter.
 - Shift Import merges imported attributes into current ones.
@@ -151,18 +152,20 @@ You can now share and reuse full attribute filter setups without needing to phys
 - Duplicate entries in the payload are skipped.
 - Invalid entries are ignored and reported.
 - Payload format/version is validated.
+- Oversized clipboard payloads are rejected before parse (current limit: 262144 characters).
 - Filter name is included in export when custom and imported when provided.
 - If imported name is missing/blank/default item name, current name is kept.
 
 ### Quick usage guide
 
 1. Open an **Attribute Filter** with an item selected.
-2. Click **Export Available** to export all attributes for that item.
-3. Modify the exported JSON to keep only the attributes you need.
-4. Click **Import** on another filter to apply it.
-5. Alternatively, build a filter manually and click **Export** to share it.
+2. Click **Tree** if you want a human-readable snapshot.
+3. Click **Export Available** to export all attributes for that item.
+4. Modify the exported JSON to keep only the attributes you need.
+5. Click **Import** on another filter to apply it.
+6. Alternatively, build a filter manually and click **Export** to share it.
 
-### Payload format (canonical, List Filters)
+### Payload format (canonical, Attribute Filters)
 
 ```json
 {
@@ -188,10 +191,11 @@ Notes:
 
 ## List Filter Import / Export
 
-List filters now support full **Import / Export** actions in their UI, including nested filters and top-level list options.
+List filters now support full **Tree / Import / Export** actions in their UI, including nested filters and top-level list options.
 
 ### Buttons in the List Filter UI
 
+- **Tree**: Copies current list filter setup to clipboard as a readable hierarchy.
 - **Export**: Copies current list filter setup to clipboard as JSON.
 - **Import**: Reads clipboard JSON and applies it.
 
@@ -207,6 +211,7 @@ List filters now support full **Import / Export** actions in their UI, including
 - Normal Import clears existing list slots, then applies imported entries.
 - If no valid imported entries are found, existing list contents are left unchanged.
 - Shift Import merges into first available empty slots.
+- Oversized clipboard payloads are rejected before parse (current limit: 262144 characters).
 - Supports nested `list_filter` and `attribute_filter` entries (recursive payloads).
 - Top-level list settings are exported/imported and applied when present (both replace and merge imports):
   - `isBlacklist` (allow/deny mode)
@@ -250,6 +255,8 @@ Compact export notes:
 
 - List filter entries are exported without redundant list-level `nbt` blobs.
 - Nested structure (`type`, list options, and `items`) remains the source of truth for list filters.
+- Tree output uses spaced `=` formatting for readability and strips duplicated key prefixes (for example `gear_rarity = Unique` instead of `gear_rarity = gear_rarity=Unique`).
+- Tree roundtrip guidance is documented in `docs/FILTER_TREE_ROUNDTRIP_PLAYBOOK.md`.
 
 Due to these changes and the compatibility additions, create is no longer a requirement to use this mod.
 

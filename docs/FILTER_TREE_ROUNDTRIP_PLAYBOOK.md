@@ -11,6 +11,8 @@ Scope
 
 - Applies to list filter payloads exported by Vault Filters Enhanced.
 - Works with V2 and legacy payloads. Preferred output is V2.
+- Tree export is available in both List Filter and Attribute Filter UIs.
+- This playbook is focused on list filter JSON roundtrip generation.
 
 Required Inputs
 
