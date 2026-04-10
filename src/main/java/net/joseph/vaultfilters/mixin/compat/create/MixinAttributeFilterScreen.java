@@ -1,7 +1,5 @@
 package net.joseph.vaultfilters.mixin.compat.create;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -55,19 +53,6 @@ import java.util.Set;
 
 @Mixin(value = AttributeFilterScreen.class, remap = false)
 public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<AttributeFilterMenu> {
-    @Unique
-    private static final Gson vault_Filters$GSON = new GsonBuilder().disableHtmlEscaping().create();
-    @Unique
-    private static final Gson vault_Filters$PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
-    @Unique
-    private static final String vault_Filters$FORMAT_KEY = "vaultfilters.attribute_filter.v1";
-    @Unique
-    private static final String vault_Filters$ATTRIBUTES_KEY = "attributes";
-    @Unique
-    private static final String vault_Filters$FORMAT_FIELD = "format";
-    @Unique
-    private static final int vault_Filters$MAX_IMPORT_CHARS = 262_144;
-
     @Unique
     private Button vault_Filters$exportButton;
     @Unique
@@ -285,7 +270,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         boolean pretty = FilterUiUtils.isShiftDownSafe();
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
         JsonObject root = new JsonObject();
-        root.addProperty(vault_Filters$FORMAT_FIELD, vault_Filters$FORMAT_KEY);
+        root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.ATTRIBUTE_FORMAT_V1);
         root.addProperty("isBlacklist", vault_Filters$isAttributeFilterBlacklist());
         String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
         if (currentName != null && !currentName.isEmpty()) {
@@ -302,9 +287,9 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             attributes.add(entry);
         }
 
-        root.add(vault_Filters$ATTRIBUTES_KEY, attributes);
+        root.add(FilterUiUtils.ATTRIBUTES_FIELD, attributes);
         try {
-            String exportJson = pretty ? vault_Filters$PRETTY_GSON.toJson(root) : vault_Filters$GSON.toJson(root);
+            String exportJson = pretty ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
         } catch (Exception ignored) {
@@ -320,8 +305,8 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.empty").withStyle(ChatFormatting.RED));
             return;
         }
-        if (clipboard.length() > vault_Filters$MAX_IMPORT_CHARS) {
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.too_large", vault_Filters$MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
+        if (clipboard.length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.too_large", FilterUiUtils.MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
             return;
         }
 
@@ -333,14 +318,14 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             JsonElement parsed = JsonParser.parseString(clipboard);
             if (parsed.isJsonObject()) {
                 JsonObject root = parsed.getAsJsonObject();
-                if (root.has(vault_Filters$FORMAT_FIELD)) {
-                    String format = root.get(vault_Filters$FORMAT_FIELD).isJsonPrimitive() ? root.get(vault_Filters$FORMAT_FIELD).getAsString() : "";
-                    if (!vault_Filters$FORMAT_KEY.equals(format)) {
+                if (root.has(FilterUiUtils.FORMAT_FIELD)) {
+                    String format = root.get(FilterUiUtils.FORMAT_FIELD).isJsonPrimitive() ? root.get(FilterUiUtils.FORMAT_FIELD).getAsString() : "";
+                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format)) {
                         FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.version", format).withStyle(ChatFormatting.RED));
                         return;
                     }
                 }
-                if (!root.has(vault_Filters$ATTRIBUTES_KEY) || !root.get(vault_Filters$ATTRIBUTES_KEY).isJsonArray()) {
+                if (!root.has(FilterUiUtils.ATTRIBUTES_FIELD) || !root.get(FilterUiUtils.ATTRIBUTES_FIELD).isJsonArray()) {
                     FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
                     return;
                 }
@@ -351,7 +336,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                     hasImportedBlacklist = true;
                     importedBlacklist = root.get("isBlacklist").getAsBoolean();
                 }
-                array = root.getAsJsonArray(vault_Filters$ATTRIBUTES_KEY);
+                array = root.getAsJsonArray(FilterUiUtils.ATTRIBUTES_FIELD);
             } else if (parsed.isJsonArray()) {
                 array = parsed.getAsJsonArray();
             } else {
@@ -443,7 +428,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     private void vault_Filters$exportAvailableAttributes() {
         boolean pretty = FilterUiUtils.isShiftDownSafe();
         JsonObject root = new JsonObject();
-        root.addProperty(vault_Filters$FORMAT_FIELD, vault_Filters$FORMAT_KEY);
+        root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.ATTRIBUTE_FORMAT_V1);
         JsonArray attributes = new JsonArray();
 
         for (ItemAttribute attribute : attributesOfItem) {
@@ -455,9 +440,9 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             attributes.add(entry);
         }
 
-        root.add(vault_Filters$ATTRIBUTES_KEY, attributes);
+        root.add(FilterUiUtils.ATTRIBUTES_FIELD, attributes);
         try {
-            String exportJson = pretty ? vault_Filters$PRETTY_GSON.toJson(root) : vault_Filters$GSON.toJson(root);
+            String exportJson = pretty ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
         } catch (Exception ignored) {

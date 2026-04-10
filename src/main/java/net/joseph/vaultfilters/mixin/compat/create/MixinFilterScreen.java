@@ -1,7 +1,5 @@
 package net.joseph.vaultfilters.mixin.compat.create;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -89,16 +87,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
     private FilterMenuAdvancedAccessor menuAccessor = (FilterMenuAdvancedAccessor) menu;
 
     // List filter import/export
-    @Unique
-    private static final Gson vault_Filters$GSON = new GsonBuilder().disableHtmlEscaping().create();
-    @Unique
-    private static final Gson vault_Filters$PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
-    @Unique
-    private static final String vault_Filters$LIST_FORMAT_KEY = "vaultfilters.list_filter.v2";
-    @Unique
-    private static final String vault_Filters$LIST_FORMAT_LEGACY_KEY = "vaultfilters.list_filter.v1";
-    @Unique
-    private static final int vault_Filters$MAX_IMPORT_CHARS = 262_144;
     @Unique
     private Button vault_Filters$exportButton;
     @Unique
@@ -201,7 +189,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
 
             JsonObject root = new JsonObject();
-            root.addProperty("format", legacyRaw ? vault_Filters$LIST_FORMAT_LEGACY_KEY : vault_Filters$LIST_FORMAT_KEY);
+            root.addProperty("format", legacyRaw ? FilterUiUtils.LIST_FORMAT_V1 : FilterUiUtils.LIST_FORMAT_V2);
             String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
             if (currentName != null && !currentName.isEmpty()) {
                 root.addProperty("name", currentName);
@@ -222,7 +210,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             filterObj.add("items", items);
             root.add("filter", filterObj);
 
-            String exportJson = prettyJson ? vault_Filters$PRETTY_GSON.toJson(root) : vault_Filters$GSON.toJson(root);
+            String exportJson = prettyJson ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
             if (legacyRaw) {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.legacy", filters.size()).withStyle(ChatFormatting.GREEN));
@@ -426,8 +414,8 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.empty").withStyle(ChatFormatting.RED));
             return;
         }
-        if (clipboard.length() > vault_Filters$MAX_IMPORT_CHARS) {
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.too_large", vault_Filters$MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
+        if (clipboard.length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.too_large", FilterUiUtils.MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
             return;
         }
 
@@ -446,7 +434,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 }
 
                 String format = root.get("format").getAsString();
-                if (!vault_Filters$LIST_FORMAT_KEY.equals(format) && !vault_Filters$LIST_FORMAT_LEGACY_KEY.equals(format)) {
+                if (!FilterUiUtils.LIST_FORMAT_V2.equals(format) && !FilterUiUtils.LIST_FORMAT_V1.equals(format)) {
                     FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.version").withStyle(ChatFormatting.RED));
                     return;
                 }

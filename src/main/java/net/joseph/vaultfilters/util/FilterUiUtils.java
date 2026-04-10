@@ -1,5 +1,7 @@
 package net.joseph.vaultfilters.util;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import net.joseph.vaultfilters.access.AbstractFilterMenuAdvancedAccessor;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
@@ -21,6 +23,16 @@ import java.util.Set;
 public final class FilterUiUtils {
     private FilterUiUtils() {
     }
+
+    public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    public static final Gson PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+    public static final int MAX_IMPORT_CHARS = 262_144;
+
+    public static final String LIST_FORMAT_V2 = "vaultfilters.list_filter.v2";
+    public static final String LIST_FORMAT_V1 = "vaultfilters.list_filter.v1";
+    public static final String ATTRIBUTE_FORMAT_V1 = "vaultfilters.attribute_filter.v1";
+    public static final String FORMAT_FIELD = "format";
+    public static final String ATTRIBUTES_FIELD = "attributes";
 
     public static final class TagEntry {
         private final String key;
