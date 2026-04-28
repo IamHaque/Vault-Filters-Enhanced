@@ -25,6 +25,9 @@ import net.joseph.vaultfilters.network.VFMessages;
 import net.joseph.vaultfilters.util.FilterExportUtilsV3;
 import net.joseph.vaultfilters.util.FilterImportUtilsV3;
 import net.joseph.vaultfilters.util.FilterUiUtils;
+import net.joseph.vaultfilters.util.FilterVersionDetector;
+import net.joseph.vaultfilters.util.FilterImportHelper;
+import net.joseph.vaultfilters.util.SerializationOptimizer;
 import net.joseph.vaultfilters.util.YamlParser;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -273,6 +276,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$exportToClipboardV3() {
+        SerializationOptimizer.reset(); // Phase 5: Reset depth tracking
         try {
             List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
             String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
@@ -315,16 +319,16 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             return;
         }
 
-        // Try to detect format: v3 YAML vs v2 JSON
-        String trimmed = clipboard.trim();
-        if (trimmed.startsWith("format:") || (trimmed.startsWith("name:") && trimmed.contains("type: attribute"))) {
-            // Looks like YAML v3
+        // Use FilterVersionDetector for format detection
+        FilterVersionDetector.FilterVersion version = FilterVersionDetector.detectVersion(clipboard);
+
+        if (version == FilterVersionDetector.FilterVersion.V3_YAML) {
             vault_Filters$importFromClipboardV3();
-        } else if (trimmed.startsWith("{")) {
-            // Looks like JSON v2
+        } else if (version == FilterVersionDetector.FilterVersion.V2_JSON) {
             vault_Filters$importFromClipboard();
         } else {
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
+            String errorMsg = FilterVersionDetector.getUnsupportedMessage(version);
+            FilterUiUtils.notifyUser(new TranslatableComponent(errorMsg).withStyle(ChatFormatting.RED));
         }
     }
 

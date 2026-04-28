@@ -26,6 +26,9 @@ import net.joseph.vaultfilters.network.VFMessages;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.joseph.vaultfilters.util.FilterExportUtilsV3;
 import net.joseph.vaultfilters.util.FilterImportUtilsV3;
+import net.joseph.vaultfilters.util.FilterVersionDetector;
+import net.joseph.vaultfilters.util.FilterImportHelper;
+import net.joseph.vaultfilters.util.SerializationOptimizer;
 import net.joseph.vaultfilters.util.YamlParser;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -717,6 +720,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
     @Unique
     private void vault_Filters$exportToClipboardV3() {
+        SerializationOptimizer.reset(); // Phase 5: Reset depth tracking
         try {
             List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
             String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
@@ -746,60 +750,70 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
     @Unique
     private java.util.Map<String, Object> vault_Filters$serializeFilterItemV3(FilterItemStack filter) {
-        java.util.Map<String, Object> obj = new java.util.LinkedHashMap<>();
-        String customName = vault_Filters$getCustomFilterName(filter);
-        if (customName != null) {
-            obj.put("name", customName);
-        }
-        if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
-            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ATTRIBUTE);
-            ItemStack item = filter.item();
-            if (item != null && item.hasTag()) {
-                CompoundTag tag = item.getTag();
-                if (tag.contains("MatchedAttributes", Tag.TAG_LIST)) {
-                    List<java.util.Map<String, Object>> attrsList = new ArrayList<>();
-                    net.minecraft.nbt.ListTag attributes = tag.getList("MatchedAttributes", Tag.TAG_COMPOUND);
-                    for (int i = 0; i < attributes.size(); i++) {
-                        CompoundTag attrTag = attributes.getCompound(i);
-                        java.util.Map<String, Object> attrMap = vault_Filters$nbtToAttributeMapV3(attrTag);
-                        if (attrMap != null) {
-                            attrsList.add(attrMap);
-                        }
-                    }
-                    if (!attrsList.isEmpty()) {
-                        obj.put(FilterExportUtilsV3.ATTRIBUTES_FIELD, attrsList);
-                    }
-                }
-            }
-        } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
-            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_LIST);
-            java.util.Map<String, Object> listModes = new java.util.LinkedHashMap<>();
-            listModes.put(FilterExportUtilsV3.MODE_WHITELIST, !listFilter.isBlacklist);
-            listModes.put(FilterExportUtilsV3.MODE_MATCH_ALL, listFilter.item().hasTag() && listFilter.item().getTag().getBoolean("MatchAll"));
-            listModes.put(FilterExportUtilsV3.MODE_RESPECT_NBT, listFilter.shouldRespectNBT);
-            obj.put(FilterExportUtilsV3.MODES_FIELD, listModes);
-            List<java.util.Map<String, Object>> nestedItems = new ArrayList<>();
-            for (FilterItemStack item : listFilter.containedItems) {
-                java.util.Map<String, Object> nestedMap = vault_Filters$serializeFilterItemV3(item);
-                if (nestedMap != null) {
-                    nestedItems.add(nestedMap);
-                }
-            }
-            if (!nestedItems.isEmpty()) {
-                obj.put(FilterExportUtilsV3.ITEMS_FIELD, nestedItems);
-            }
-        } else if (!filter.isEmpty()) {
-            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ITEM);
-            ItemStack item = filter.item();
-            ResourceLocation itemId = Registry.ITEM.getKey(item.getItem());
-            obj.put("itemId", itemId.toString());
-            if (item.getCount() > 1) {
-                obj.put("count", item.getCount());
-            }
-        } else {
+        // Depth tracking (Phase 5 optimization)
+        if (!SerializationOptimizer.pushDepth()) {
+            // Max depth exceeded, return null to stop recursion
             return null;
         }
-        return obj;
+
+        try {
+            java.util.Map<String, Object> obj = new java.util.LinkedHashMap<>();
+            String customName = vault_Filters$getCustomFilterName(filter);
+            if (customName != null) {
+                obj.put("name", customName);
+            }
+            if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
+                obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ATTRIBUTE);
+                ItemStack item = filter.item();
+                if (item != null && item.hasTag()) {
+                    CompoundTag tag = item.getTag();
+                    if (tag.contains("MatchedAttributes", Tag.TAG_LIST)) {
+                        List<java.util.Map<String, Object>> attrsList = new ArrayList<>();
+                        net.minecraft.nbt.ListTag attributes = tag.getList("MatchedAttributes", Tag.TAG_COMPOUND);
+                        for (int i = 0; i < attributes.size(); i++) {
+                            CompoundTag attrTag = attributes.getCompound(i);
+                            java.util.Map<String, Object> attrMap = vault_Filters$nbtToAttributeMapV3(attrTag);
+                            if (attrMap != null) {
+                                attrsList.add(attrMap);
+                            }
+                        }
+                        if (!attrsList.isEmpty()) {
+                            obj.put(FilterExportUtilsV3.ATTRIBUTES_FIELD, attrsList);
+                        }
+                    }
+                }
+            } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
+                obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_LIST);
+                java.util.Map<String, Object> listModes = new java.util.LinkedHashMap<>();
+                listModes.put(FilterExportUtilsV3.MODE_WHITELIST, !listFilter.isBlacklist);
+                listModes.put(FilterExportUtilsV3.MODE_MATCH_ALL, listFilter.item().hasTag() && listFilter.item().getTag().getBoolean("MatchAll"));
+                listModes.put(FilterExportUtilsV3.MODE_RESPECT_NBT, listFilter.shouldRespectNBT);
+                obj.put(FilterExportUtilsV3.MODES_FIELD, listModes);
+                List<java.util.Map<String, Object>> nestedItems = new ArrayList<>();
+                for (FilterItemStack item : listFilter.containedItems) {
+                    java.util.Map<String, Object> nestedMap = vault_Filters$serializeFilterItemV3(item);
+                    if (nestedMap != null) {
+                        nestedItems.add(nestedMap);
+                    }
+                }
+                if (!nestedItems.isEmpty()) {
+                    obj.put(FilterExportUtilsV3.ITEMS_FIELD, nestedItems);
+                }
+            } else if (!filter.isEmpty()) {
+                obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ITEM);
+                ItemStack item = filter.item();
+                ResourceLocation itemId = Registry.ITEM.getKey(item.getItem());
+                obj.put("itemId", itemId.toString());
+                if (item.getCount() > 1) {
+                    obj.put("count", item.getCount());
+                }
+            } else {
+                return null;
+            }
+            return obj;
+        } finally {
+            SerializationOptimizer.popDepth();
+        }
     }
 
     @Unique
@@ -866,13 +880,17 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.empty").withStyle(ChatFormatting.RED));
             return;
         }
-        String trimmed = clipboard.trim();
-        if (trimmed.startsWith("format:") || (trimmed.startsWith("name:") && trimmed.contains("type: list"))) {
+
+        // Use FilterVersionDetector for format detection
+        FilterVersionDetector.FilterVersion version = FilterVersionDetector.detectVersion(clipboard);
+
+        if (version == FilterVersionDetector.FilterVersion.V3_YAML) {
             vault_Filters$importFromClipboardV3();
-        } else if (trimmed.startsWith("{")) {
+        } else if (version == FilterVersionDetector.FilterVersion.V2_JSON) {
             vault_Filters$importFromClipboard();
         } else {
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
+            String errorMsg = FilterVersionDetector.getUnsupportedMessage(version);
+            FilterUiUtils.notifyUser(new TranslatableComponent(errorMsg).withStyle(ChatFormatting.RED));
         }
     }
 
