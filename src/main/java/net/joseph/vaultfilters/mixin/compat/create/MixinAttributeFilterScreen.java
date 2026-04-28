@@ -22,7 +22,10 @@ import com.simibubi.create.foundation.utility.Pair;
 import net.joseph.vaultfilters.attributes.abstracts.VaultAttribute;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
+import net.joseph.vaultfilters.util.FilterExportUtilsV3;
+import net.joseph.vaultfilters.util.FilterImportUtilsV3;
 import net.joseph.vaultfilters.util.FilterUiUtils;
+import net.joseph.vaultfilters.util.YamlParser;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -49,6 +52,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
 
 @Mixin(value = AttributeFilterScreen.class, remap = false)
@@ -148,21 +153,22 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         int x = leftPos + this.background.width - 236;
         int y = topPos - 26;
 
-        vault_Filters$exportTreeButton = new Button(x, y, 42, 18,
-            new TranslatableComponent("vaultfilters.gui.attribute_filter.export_tree"),
-            button -> vault_Filters$exportTreeToClipboard());
-
-        vault_Filters$exportButton = new Button(x + 46, y, 42, 18,
+        // Export/Import buttons - use v3 YAML as default
+        vault_Filters$exportButton = new Button(x, y, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.export"),
-                button -> vault_Filters$exportToClipboard());
+                button -> vault_Filters$exportToClipboardV3());
 
-        vault_Filters$importButton = new Button(x + 92, y, 42, 18,
+        vault_Filters$importButton = new Button(x + 46, y, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.import"),
-                button -> vault_Filters$importFromClipboard());
+                button -> vault_Filters$importFromClipboardAuto());
+
+        vault_Filters$exportTreeButton = new Button(x + 92, y, 42, 18,
+            new TranslatableComponent("vaultfilters.gui.attribute_filter.export_tree"),
+            button -> vault_Filters$exportToClipboardV3()); // Same as export (v3 is tree-like)
 
         vault_Filters$exportAvailableButton = new Button(x + 138, y, 90, 18,
                 new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available"),
-                button -> vault_Filters$exportAvailableAttributes());
+                button -> vault_Filters$exportAvailableAttributesV3());
 
         addRenderableWidget(vault_Filters$exportTreeButton);
         addRenderableWidget(vault_Filters$exportButton);
@@ -262,6 +268,197 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
                 this.vault_Filters$addAttr(pair.getFirst(), pair.getSecond());
             }
+        }
+    }
+
+    @Unique
+    private void vault_Filters$exportToClipboardV3() {
+        try {
+            List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
+            String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
+            boolean isBlacklist = vault_Filters$isAttributeFilterBlacklist();
+
+            // Build YAML header
+            Map<String, Object> root = FilterExportUtilsV3.buildYamlHeader(
+                currentName,
+                "attribute",
+                isBlacklist,
+                false, // matchAll not used for attributes
+                false  // respectNBT not used for attributes
+            );
+
+            // Build attributes array
+            List<Map<String, Object>> attrsList = new ArrayList<>();
+            for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
+                Map<String, Object> attrMap = FilterExportUtilsV3.attributeToMap(pair.getFirst(), pair.getSecond());
+                if (attrMap != null) {
+                    attrsList.add(attrMap);
+                }
+            }
+
+            root.put(FilterExportUtilsV3.ATTRIBUTES_FIELD, attrsList);
+
+            // Serialize to YAML
+            String yamlExport = FilterExportUtilsV3.toYamlString(root);
+            Minecraft.getInstance().keyboardHandler.setClipboard(yamlExport);
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$importFromClipboardAuto() {
+        String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
+        if (clipboard == null || clipboard.isBlank()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.empty").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // Try to detect format: v3 YAML vs v2 JSON
+        String trimmed = clipboard.trim();
+        if (trimmed.startsWith("format:") || (trimmed.startsWith("name:") && trimmed.contains("type: attribute"))) {
+            // Looks like YAML v3
+            vault_Filters$importFromClipboardV3();
+        } else if (trimmed.startsWith("{")) {
+            // Looks like JSON v2
+            vault_Filters$importFromClipboard();
+        } else {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$importFromClipboardV3() {
+        boolean merge = FilterUiUtils.isShiftDownSafe();
+        String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
+        if (clipboard == null || clipboard.isBlank()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.empty").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (clipboard.length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.too_large", FilterUiUtils.MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        FilterImportUtilsV3.FilterV3Data data;
+        try {
+            data = FilterImportUtilsV3.parseYaml(clipboard);
+        } catch (FilterImportUtilsV3.ImportException e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        if (!"attribute".equals(data.type)) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        if (data.attributes == null || data.attributes.isEmpty()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.none").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // Reconstruct attributes and validate before applying
+        List<Pair<ItemAttribute, Boolean>> imported = new ArrayList<>();
+        Set<String> dedupe = new HashSet<>();
+        int invalid = 0;
+        int duplicates = 0;
+
+        for (FilterImportUtilsV3.AttributeV3 attrData : data.attributes) {
+            ItemAttribute attr = FilterImportUtilsV3.reconstructAttribute(attrData);
+            if (attr == null) {
+                invalid++;
+                continue;
+            }
+
+            // Deduplication
+                CompoundTag attrTag = new CompoundTag();
+                attr.serializeNBT(attrTag);
+                String dedupeKey = (attrData.inverted ? "1:" : "0:") + attrTag.toString();
+            if (!dedupe.add(dedupeKey)) {
+                duplicates++;
+                continue;
+            }
+
+            imported.add(Pair.of(attr, attrData.inverted));
+        }
+
+        if (imported.isEmpty()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.none").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // Clear existing if replace mode
+        if (!merge) {
+            this.menu.clearContents();
+            this.contentsCleared();
+            this.menu.sendClearPacket();
+
+            this.selectedAttributes.clear();
+            this.selectedAttributes.add(this.selectedT.plainCopy().withStyle(ChatFormatting.GRAY));
+            this.selectedAttributes.remove(vault_Filters$delTooltipLine);
+            this.vault_Filters$selectedAttrIndex = 0;
+            this.vault_Filters$deletionProgressTick = 0;
+        }
+
+        // Apply imported name if provided
+        if (data.filterName != null && !data.filterName.isBlank()) {
+            FilterUiUtils.applyImportedFilterName((AbstractFilterMenu) this.menu, data.filterName);
+        }
+
+        // Apply blacklist mode
+        vault_Filters$setAttributeFilterBlacklist(data.whitelist ? false : true);
+        AllPackets.getChannel().sendToServer(new FilterScreenPacket(
+            data.whitelist ? FilterScreenPacket.Option.WHITELIST : FilterScreenPacket.Option.BLACKLIST,
+            new CompoundTag()
+        ));
+
+        // Add all attributes
+        for (Pair<ItemAttribute, Boolean> pair : imported) {
+            this.vault_Filters$addAttr(pair.getFirst(), pair.getSecond());
+        }
+
+        // Notify user
+        if (merge) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.imported.merge", imported.size(), invalid, duplicates).withStyle(ChatFormatting.GREEN));
+        } else {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.imported.replace", imported.size(), invalid, duplicates).withStyle(ChatFormatting.GREEN));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$exportAvailableAttributesV3() {
+        try {
+            String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
+            String displayName = currentName != null && !currentName.isBlank() ? currentName + " - Available" : "Available Attributes";
+
+            // Build YAML header
+            Map<String, Object> root = FilterExportUtilsV3.buildYamlHeader(
+                displayName,
+                "attribute",
+                false, // default whitelist
+                false,
+                false
+            );
+
+            // Build available attributes array
+            List<Map<String, Object>> attrsList = new ArrayList<>();
+            for (ItemAttribute attribute : attributesOfItem) {
+                Map<String, Object> attrMap = FilterExportUtilsV3.attributeToMap(attribute, false);
+                if (attrMap != null) {
+                    attrsList.add(attrMap);
+                }
+            }
+
+            root.put(FilterExportUtilsV3.ATTRIBUTES_FIELD, attrsList);
+
+            // Serialize to YAML
+            String yamlExport = FilterExportUtilsV3.toYamlString(root);
+            Minecraft.getInstance().keyboardHandler.setClipboard(yamlExport);
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
         }
     }
 

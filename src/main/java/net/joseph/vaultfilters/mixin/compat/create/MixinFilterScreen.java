@@ -24,6 +24,9 @@ import net.joseph.vaultfilters.access.FilterMenuAdvancedAccessor;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
 import net.joseph.vaultfilters.util.FilterUiUtils;
+import net.joseph.vaultfilters.util.FilterExportUtilsV3;
+import net.joseph.vaultfilters.util.FilterImportUtilsV3;
+import net.joseph.vaultfilters.util.YamlParser;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -32,6 +35,9 @@ import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import com.simibubi.create.content.logistics.filter.ItemAttribute;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -126,15 +132,15 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
         vault_Filters$exportButton = new Button(bx, by, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.list_filter.export"),
-                button -> vault_Filters$exportToClipboard());
+                button -> vault_Filters$exportToClipboardV3());
 
         vault_Filters$importButton = new Button(bx + 46, by, 42, 18,
                 new TranslatableComponent("vaultfilters.gui.list_filter.import"),
-                button -> vault_Filters$importFromClipboard());
+                button -> vault_Filters$importFromClipboardAuto());
 
         vault_Filters$exportTreeButton = new Button(bx - 46, by, 42, 18,
             new TranslatableComponent("vaultfilters.gui.list_filter.export_tree"),
-            button -> vault_Filters$exportTreeToClipboard());
+            button -> vault_Filters$exportToClipboardV3());
 
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
@@ -707,6 +713,309 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             }
         }
         return filters;
+    }
+
+    @Unique
+    private void vault_Filters$exportToClipboardV3() {
+        try {
+            List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
+            String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
+            if (currentName == null || currentName.isEmpty()) {
+                currentName = "List Filter";
+            }
+
+            java.util.Map<String, Object> root = FilterExportUtilsV3.buildYamlHeader(currentName, FilterExportUtilsV3.TYPE_LIST, menuAccessor.vault_filters$isBlacklist(), menuAccessor.vault_filters$getMatchAll(), menuAccessor.vault_filters$shouldRespectNBT());
+            java.util.Map<String, Object> modes = (java.util.Map<String, Object>) root.get(FilterExportUtilsV3.MODES_FIELD);
+
+            List<java.util.Map<String, Object>> itemsList = new ArrayList<>();
+            for (FilterItemStack filter : filters) {
+                java.util.Map<String, Object> itemMap = vault_Filters$serializeFilterItemV3(filter);
+                if (itemMap != null) {
+                    itemsList.add(itemMap);
+                }
+            }
+            root.put(FilterExportUtilsV3.ITEMS_FIELD, itemsList);
+
+            String yamlString = FilterExportUtilsV3.toYamlString(root);
+            Minecraft.getInstance().keyboardHandler.setClipboard(yamlString);
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.v3", filters.size()).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.export.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private java.util.Map<String, Object> vault_Filters$serializeFilterItemV3(FilterItemStack filter) {
+        java.util.Map<String, Object> obj = new java.util.LinkedHashMap<>();
+        String customName = vault_Filters$getCustomFilterName(filter);
+        if (customName != null) {
+            obj.put("name", customName);
+        }
+        if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
+            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ATTRIBUTE);
+            ItemStack item = filter.item();
+            if (item != null && item.hasTag()) {
+                CompoundTag tag = item.getTag();
+                if (tag.contains("MatchedAttributes", Tag.TAG_LIST)) {
+                    List<java.util.Map<String, Object>> attrsList = new ArrayList<>();
+                    net.minecraft.nbt.ListTag attributes = tag.getList("MatchedAttributes", Tag.TAG_COMPOUND);
+                    for (int i = 0; i < attributes.size(); i++) {
+                        CompoundTag attrTag = attributes.getCompound(i);
+                        java.util.Map<String, Object> attrMap = vault_Filters$nbtToAttributeMapV3(attrTag);
+                        if (attrMap != null) {
+                            attrsList.add(attrMap);
+                        }
+                    }
+                    if (!attrsList.isEmpty()) {
+                        obj.put(FilterExportUtilsV3.ATTRIBUTES_FIELD, attrsList);
+                    }
+                }
+            }
+        } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
+            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_LIST);
+            java.util.Map<String, Object> listModes = new java.util.LinkedHashMap<>();
+            listModes.put(FilterExportUtilsV3.MODE_WHITELIST, !listFilter.isBlacklist);
+            listModes.put(FilterExportUtilsV3.MODE_MATCH_ALL, listFilter.item().hasTag() && listFilter.item().getTag().getBoolean("MatchAll"));
+            listModes.put(FilterExportUtilsV3.MODE_RESPECT_NBT, listFilter.shouldRespectNBT);
+            obj.put(FilterExportUtilsV3.MODES_FIELD, listModes);
+            List<java.util.Map<String, Object>> nestedItems = new ArrayList<>();
+            for (FilterItemStack item : listFilter.containedItems) {
+                java.util.Map<String, Object> nestedMap = vault_Filters$serializeFilterItemV3(item);
+                if (nestedMap != null) {
+                    nestedItems.add(nestedMap);
+                }
+            }
+            if (!nestedItems.isEmpty()) {
+                obj.put(FilterExportUtilsV3.ITEMS_FIELD, nestedItems);
+            }
+        } else if (!filter.isEmpty()) {
+            obj.put(FilterExportUtilsV3.TYPE_FIELD, FilterExportUtilsV3.TYPE_ITEM);
+            ItemStack item = filter.item();
+            ResourceLocation itemId = Registry.ITEM.getKey(item.getItem());
+            obj.put("itemId", itemId.toString());
+            if (item.getCount() > 1) {
+                obj.put("count", item.getCount());
+            }
+        } else {
+            return null;
+        }
+        return obj;
+    }
+
+    @Unique
+    private java.util.Map<String, Object> vault_Filters$nbtToAttributeMapV3(CompoundTag attrTag) {
+        if (attrTag == null || attrTag.isEmpty()) {
+            return null;
+        }
+        boolean inverted = attrTag.getBoolean(FilterExportUtilsV3.INVERTED_FIELD);
+        FilterUiUtils.TagEntry firstEntry = FilterUiUtils.firstSortedDataEntry(attrTag, FilterExportUtilsV3.INVERTED_FIELD);
+        if (firstEntry == null) {
+            return null;
+        }
+        String key = firstEntry.key();
+        Tag valueTag = firstEntry.value();
+        Object params = vault_Filters$tagToObject(valueTag);
+        if (!(params instanceof java.util.Map)) {
+            java.util.Map<String, Object> wrappedParams = new java.util.LinkedHashMap<>();
+            wrappedParams.put(key, params);
+            params = wrappedParams;
+        }
+        java.util.Map<String, Object> attrMap = new java.util.LinkedHashMap<>();
+        attrMap.put(FilterExportUtilsV3.KEY_FIELD, key);
+        attrMap.put(FilterExportUtilsV3.PARAMS_FIELD, params);
+        attrMap.put(FilterExportUtilsV3.INVERTED_FIELD, inverted);
+        return attrMap;
+    }
+
+    @Unique
+    private Object vault_Filters$tagToObject(Tag tag) {
+        if (tag == null) return null;
+        switch (tag.getId()) {
+            case Tag.TAG_BYTE: return ((net.minecraft.nbt.ByteTag) tag).getAsByte() != 0;
+            case Tag.TAG_SHORT: return (int) ((net.minecraft.nbt.ShortTag) tag).getAsShort();
+            case Tag.TAG_INT: return ((net.minecraft.nbt.IntTag) tag).getAsInt();
+            case Tag.TAG_LONG: return ((net.minecraft.nbt.LongTag) tag).getAsLong();
+            case Tag.TAG_FLOAT: return (double) ((net.minecraft.nbt.FloatTag) tag).getAsFloat();
+            case Tag.TAG_DOUBLE: return ((net.minecraft.nbt.DoubleTag) tag).getAsDouble();
+            case Tag.TAG_STRING: return ((net.minecraft.nbt.StringTag) tag).getAsString();
+            case Tag.TAG_COMPOUND: {
+                CompoundTag c = (CompoundTag) tag;
+                java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+                for (String k : c.getAllKeys()) {
+                    map.put(k, vault_Filters$tagToObject(c.get(k)));
+                }
+                return map;
+            }
+            case Tag.TAG_LIST: {
+                net.minecraft.nbt.ListTag list = (net.minecraft.nbt.ListTag) tag;
+                List<Object> res = new ArrayList<>();
+                for (int i = 0; i < list.size(); i++) {
+                    res.add(vault_Filters$tagToObject(list.get(i)));
+                }
+                return res;
+            }
+            default:
+                return tag.getAsString();
+        }
+    }
+
+    @Unique
+    private void vault_Filters$importFromClipboardAuto() {
+        String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
+        if (clipboard == null || clipboard.isBlank()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.empty").withStyle(ChatFormatting.RED));
+            return;
+        }
+        String trimmed = clipboard.trim();
+        if (trimmed.startsWith("format:") || (trimmed.startsWith("name:") && trimmed.contains("type: list"))) {
+            vault_Filters$importFromClipboardV3();
+        } else if (trimmed.startsWith("{")) {
+            vault_Filters$importFromClipboard();
+        } else {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$importFromClipboardV3() {
+        boolean merge = FilterUiUtils.isShiftDownSafe();
+        String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
+        if (clipboard == null || clipboard.isBlank()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.empty").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (clipboard.length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.too_large", FilterUiUtils.MAX_IMPORT_CHARS).withStyle(ChatFormatting.RED));
+            return;
+        }
+        FilterImportUtilsV3.FilterV3Data data;
+        try {
+            data = FilterImportUtilsV3.parseYaml(clipboard);
+        } catch (FilterImportUtilsV3.ImportException e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (!"list".equals(data.type)) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (data.items == null || data.items.isEmpty()) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.none").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // Apply modes
+        menuAccessor.vault_filters$setBlacklist(!data.whitelist);
+        AllPackets.getChannel().sendToServer(new FilterScreenPacket(data.whitelist ? FilterScreenPacket.Option.WHITELIST : FilterScreenPacket.Option.BLACKLIST, new CompoundTag()));
+        menuAccessor.vault_filters$setMatchAll(data.matchAll);
+        VFMessages.VFCHANNEL.sendToServer(new MenuFeaturesPacket(data.matchAll ? MenuFeaturesPacket.MenuAction.MATCH_ALL : MenuFeaturesPacket.MenuAction.MATCH_ANY));
+        menuAccessor.vault_filters$setRespectNBT(data.respectNBT);
+        AllPackets.getChannel().sendToServer(new FilterScreenPacket(data.respectNBT ? FilterScreenPacket.Option.RESPECT_DATA : FilterScreenPacket.Option.IGNORE_DATA, new CompoundTag()));
+
+        ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
+        ItemStackHandler handler = FilterItem.getFilterItems(contentHolder);
+        int slotCount = handler.getSlots();
+
+        if (!merge) {
+            this.menu.clearContents();
+            for (int slot = 0; slot < slotCount; slot++) {
+                vault_Filters$sendFilterSlotUpdate(slot, ItemStack.EMPTY.serializeNBT());
+                handler.setStackInSlot(slot, ItemStack.EMPTY);
+            }
+        }
+
+        if (data.filterName != null && !data.filterName.isBlank()) {
+            FilterUiUtils.applyImportedFilterName((AbstractFilterMenu) this.menu, data.filterName);
+        }
+
+        int imported = 0;
+        int slotIndex = merge ? vault_Filters$findFirstEmptySlot(handler) : 0;
+        for (FilterImportUtilsV3.FilterV3Item item : data.items) {
+            CompoundTag tag = vault_Filters$buildFilterTagFromV3Item(item);
+            if (tag == null) continue;
+            while (slotIndex < slotCount && !handler.getStackInSlot(slotIndex).isEmpty()) slotIndex++;
+            if (slotIndex >= slotCount) break;
+            vault_Filters$sendFilterSlotUpdate(slotIndex, tag);
+            handler.setStackInSlot(slotIndex, ItemStack.of(tag));
+            imported++;
+            slotIndex++;
+        }
+
+        if (imported == 0) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.none").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (merge) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.imported.merge", imported).withStyle(ChatFormatting.GREEN));
+        } else {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.imported.replace", imported).withStyle(ChatFormatting.GREEN));
+        }
+    }
+
+    @Unique
+    private CompoundTag vault_Filters$buildFilterTagFromV3Item(FilterImportUtilsV3.FilterV3Item item) {
+        if (item == null || item.type == null) return null;
+        try {
+            if (FilterExportUtilsV3.TYPE_ATTRIBUTE.equals(item.type)) {
+                ItemStack stack = AllItems.ATTRIBUTE_FILTER.get().getDefaultInstance();
+                CompoundTag tag = new CompoundTag();
+                net.minecraft.nbt.ListTag matched = new net.minecraft.nbt.ListTag();
+                if (item.attributes != null) {
+                    for (FilterImportUtilsV3.AttributeV3 a : item.attributes) {
+                        ItemAttribute ia = FilterImportUtilsV3.reconstructAttribute(a);
+                        if (ia == null) continue;
+                        CompoundTag at = new CompoundTag();
+                        ia.serializeNBT(at);
+                        if (a.inverted) at.putBoolean(FilterExportUtilsV3.INVERTED_FIELD, true);
+                        matched.add(at);
+                    }
+                }
+                if (!matched.isEmpty()) {
+                    tag.put("MatchedAttributes", matched);
+                }
+                if (item.name != null && !item.name.isBlank()) tag.putString("Name", item.name);
+                stack.setTag(tag);
+                return stack.serializeNBT();
+            } else if (FilterExportUtilsV3.TYPE_LIST.equals(item.type)) {
+                ItemStack stack = AllItems.FILTER.get().getDefaultInstance();
+                CompoundTag tag = new CompoundTag();
+                // modes
+                tag.putBoolean("Blacklist", !item.whitelist);
+                tag.putBoolean("MatchAll", item.matchAll);
+                tag.putBoolean("RespectNBT", item.respectNBT);
+                // nested items
+                ItemStackHandler nested = FilterItem.getFilterItems(stack);
+                if (item.items != null) {
+                    int slot = 0;
+                    for (FilterImportUtilsV3.FilterV3Item nestedItem : item.items) {
+                        if (slot >= nested.getSlots()) break;
+                        CompoundTag nestedTag = vault_Filters$buildFilterTagFromV3Item(nestedItem);
+                        if (nestedTag == null) continue;
+                        nested.setStackInSlot(slot, ItemStack.of(nestedTag));
+                        slot++;
+                    }
+                }
+                tag.put("Items", nested.serializeNBT());
+                if (item.name != null && !item.name.isBlank()) tag.putString("Name", item.name);
+                stack.setTag(tag);
+                return stack.serializeNBT();
+            } else if (FilterExportUtilsV3.TYPE_ITEM.equals(item.type)) {
+                if (item.itemId == null) return null;
+                ResourceLocation rl = new ResourceLocation(item.itemId);
+                Item it = Registry.ITEM.get(rl);
+                if (it == Items.AIR) return null;
+                ItemStack stack = new ItemStack(it, item.count <= 0 ? 1 : item.count);
+                if (item.name != null && !item.name.isBlank()) {
+                    CompoundTag tag = stack.getOrCreateTag();
+                    tag.putString("Name", item.name);
+                    stack.setTag(tag);
+                }
+                return stack.serializeNBT();
+            }
+        } catch (Exception e) {
+            // swallow and return null on failures
+        }
+        return null;
     }
 
 }
