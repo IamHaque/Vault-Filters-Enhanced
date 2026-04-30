@@ -119,6 +119,8 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.18.2-40.3.11'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
     //implementation fg.deobf("curse.maven:vault-hunters-official-mod-458203:5601579")
 
     implementation fg.deobf("com.simibubi.create:create-${create_minecraft_version}:${create_version}:slim") { transitive = false }
@@ -218,4 +220,8 @@ tasks.named("jarJar") {
 }
 tasks.named("build").configure {
     finalizedBy("deleteShadowJar")
+}
+
+test {
+    useJUnitPlatform()
 }

@@ -143,7 +143,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
         vault_Filters$exportTreeButton = new Button(bx - 46, by, 42, 18,
             new TranslatableComponent("vaultfilters.gui.list_filter.export_tree"),
-            button -> vault_Filters$exportToClipboardV3());
+            button -> vault_Filters$exportTreeToClipboard());
 
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);

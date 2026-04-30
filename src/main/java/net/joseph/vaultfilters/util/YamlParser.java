@@ -104,7 +104,6 @@ public class YamlParser {
     private static String dumpMap(Map<String, Object> map, int indent) {
         StringBuilder sb = new StringBuilder();
         String indentStr = "  ".repeat(indent);
-        String childIndentStr = "  ".repeat(indent + 1);
 
         boolean first = true;
         for (Map.Entry<String, Object> entry : map.entrySet()) {
@@ -113,13 +112,13 @@ public class YamlParser {
             }
             first = false;
 
-            sb.append(indentStr).append(entry.getKey()).append(": ");
             Object val = entry.getValue();
 
             if (val instanceof Map || val instanceof List) {
-                sb.append("\n").append(childIndentStr).append(dumpValue(val, indent + 1));
+                sb.append(indentStr).append(entry.getKey()).append(":");
+                sb.append("\n").append(dumpValue(val, indent + 1));
             } else {
-                sb.append(dumpValue(val, indent));
+                sb.append(indentStr).append(entry.getKey()).append(": ").append(dumpValue(val, indent));
             }
         }
 
@@ -128,7 +127,6 @@ public class YamlParser {
 
     private static String dumpList(List<Object> list, int indent) {
         StringBuilder sb = new StringBuilder();
-        String indentStr = "  ".repeat(indent);
         String itemIndentStr = "  ".repeat(indent);
 
         for (int i = 0; i < list.size(); i++) {
@@ -139,11 +137,37 @@ public class YamlParser {
             Object item = list.get(i);
             sb.append(itemIndentStr).append("- ");
 
-            if (item instanceof Map || item instanceof List) {
-                sb.append("\n").append("  ".repeat(indent + 1)).append(dumpValue(item, indent + 1));
+            if (item instanceof Map) {
+                sb.append(dumpInlineMap((Map<String, Object>) item, indent));
+            } else if (item instanceof List) {
+                sb.append("\n").append(dumpValue(item, indent + 1));
             } else {
                 sb.append(dumpValue(item, indent));
             }
+        }
+
+        return sb.toString();
+    }
+
+    private static String dumpInlineMap(Map<String, Object> map, int indent) {
+        StringBuilder sb = new StringBuilder();
+        int index = 0;
+
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (index > 0) {
+                sb.append("\n").append("  ".repeat(indent + 1));
+            }
+
+            Object val = entry.getValue();
+
+            if (val instanceof Map || val instanceof List) {
+                sb.append(entry.getKey()).append(":");
+                sb.append("\n").append(dumpValue(val, indent + 2));
+            } else {
+                sb.append(entry.getKey()).append(": ").append(dumpValue(val, indent + 1));
+            }
+
+            index++;
         }
 
         return sb.toString();
@@ -186,7 +210,7 @@ public class YamlParser {
                 continue;
             }
 
-            if (parentIndent >= 0 && indent <= parentIndent) {
+            if (parentIndent >= 0 && indent < parentIndent) {
                 break;
             }
 
@@ -272,10 +296,39 @@ public class YamlParser {
                 String nextLine = lines.get(nextIdx);
                 int nextIndent = getIndentation(nextLine);
                 if (nextIndent > expectedIndent - 2) {
-                    return parseBlock(lines, nextIdx, expectedIndent);
+                    return parseBlock(lines, nextIdx, -1);
                 }
             }
             return null;
+        }
+
+        Matcher inlineMapMatcher = KEY_VALUE_PATTERN.matcher(valueStr);
+        if (inlineMapMatcher.matches()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            String key = inlineMapMatcher.group(1);
+            String inlineValueStr = inlineMapMatcher.group(2).trim();
+            Object firstValue = parseValue(inlineValueStr, lines, nextIdx, expectedIndent);
+
+            if (firstValue instanceof ParseResult) {
+                ParseResult pr = (ParseResult) firstValue;
+                map.put(key, pr.value);
+                nextIdx = pr.nextLineIdx;
+            } else {
+                map.put(key, firstValue);
+            }
+
+            if (nextIdx < lines.size()) {
+                int nextIndent = getIndentation(lines.get(nextIdx));
+                if (nextIndent >= expectedIndent) {
+                    ParseResult continuation = parseBlock(lines, nextIdx, -1);
+                    if (continuation.value instanceof Map) {
+                        map.putAll((Map<String, Object>) continuation.value);
+                        nextIdx = continuation.nextLineIdx;
+                    }
+                }
+            }
+
+            return new ParseResult(map, nextIdx);
         }
 
         if (valueStr.equalsIgnoreCase("true")) {

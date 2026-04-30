@@ -49,6 +49,9 @@ public abstract class VaultAttribute<V> implements ItemAttribute {
      */
     @Override
     public boolean appliesTo(ItemStack itemStack) {
+        if (itemStack == null) {
+            return false;
+        }
         return Objects.equals(this.value, getValue(itemStack));
     }
 
@@ -69,6 +72,9 @@ public abstract class VaultAttribute<V> implements ItemAttribute {
     }
 
     public ItemAttribute getAttribute(ItemStack itemStack) {
+        if (itemStack == null) {
+            return null;
+        }
         V value = getValue(itemStack);
         return value != null ? withValue(value) : null;
     }
@@ -81,6 +87,9 @@ public abstract class VaultAttribute<V> implements ItemAttribute {
     @Override
     public List<ItemAttribute> listAttributesOf(ItemStack itemStack) {
         List<ItemAttribute> attributes = new ArrayList<>();
+        if (itemStack == null) {
+            return attributes;
+        }
         ItemAttribute attribute = getAttribute(itemStack);
         if (attribute != null) {
             attributes.add(attribute);

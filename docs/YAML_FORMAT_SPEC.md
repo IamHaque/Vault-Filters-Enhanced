@@ -424,7 +424,7 @@ items:
 
 ## YAML Syntax Notes
 
-- **Colons & Spaces:** Keys must be followed by `: ` (colon + space)
+- **Colons & Spaces:** Keys must be followed by `:` (colon + space)
 - **Indentation:** Use 2 spaces per level (not tabs)
 - **Strings:** Quote strings containing special characters or spaces
 - **Booleans:** Use `true` / `false` (no quotes)
