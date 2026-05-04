@@ -770,6 +770,22 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
     @Unique
     private CompoundTag vault_Filters$buildAttributeFilterTagFromJson(JsonObject obj, String name) throws Exception {
+        // Legacy v1/v2 list exports serialize attribute_filter entries as full stack NBT.
+        // If present, restore directly to preserve all original attribute data.
+        String nbtString = vault_Filters$getNbtString(obj);
+        if (nbtString != null) {
+            CompoundTag parsed = TagParser.parseTag(nbtString);
+            return vault_Filters$applyNameToSerializedStack(parsed, name);
+        }
+
+        JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
+        if (stackPayload != null) {
+            CompoundTag parsed = stackPayload.isJsonPrimitive()
+                    ? TagParser.parseTag(stackPayload.getAsString())
+                    : FilterPayloadUtils.jsonToCompoundTag(stackPayload);
+            return vault_Filters$applyNameToSerializedStack(parsed, name);
+        }
+
         ItemStack attributeStack = AllItems.ATTRIBUTE_FILTER.asStack();
         CompoundTag tag = attributeStack.getOrCreateTag();
 
