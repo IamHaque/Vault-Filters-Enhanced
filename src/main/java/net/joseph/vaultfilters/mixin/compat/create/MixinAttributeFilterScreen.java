@@ -12,6 +12,7 @@ import com.simibubi.create.AllPackets;
 import com.simibubi.create.content.logistics.filter.AbstractFilterMenu;
 import com.simibubi.create.content.logistics.filter.AbstractFilterScreen;
 import com.simibubi.create.content.logistics.filter.AttributeFilterMenu;
+import com.simibubi.create.content.logistics.filter.AttributeFilterMenu.WhitelistMode;
 import com.simibubi.create.content.logistics.filter.AttributeFilterScreen;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import com.simibubi.create.content.logistics.filter.FilterScreenPacket;
@@ -22,6 +23,7 @@ import com.simibubi.create.foundation.utility.Pair;
 import net.joseph.vaultfilters.attributes.abstracts.VaultAttribute;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
+import net.joseph.vaultfilters.util.FilterPayloadUtils;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -267,15 +269,13 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$exportToClipboard() {
-        boolean pretty = FilterUiUtils.isShiftDownSafe();
+        boolean shift = FilterUiUtils.isShiftDownSafe();
+        boolean ctrl = FilterUiUtils.isControlDownSafe();
+        boolean legacyRaw = shift && ctrl;
+        boolean minifiedV2 = shift && !ctrl;
+        boolean prettyV2 = !shift;
+        boolean pretty = !minifiedV2;
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
-        JsonObject root = new JsonObject();
-        root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.ATTRIBUTE_FORMAT_V1);
-        root.addProperty("isBlacklist", vault_Filters$isAttributeFilterBlacklist());
-        String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
-        if (currentName != null && !currentName.isEmpty()) {
-            root.addProperty("name", currentName);
-        }
         JsonArray attributes = new JsonArray();
 
         for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
@@ -287,11 +287,23 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             attributes.add(entry);
         }
 
-        root.add(FilterUiUtils.ATTRIBUTES_FIELD, attributes);
+        JsonObject root = FilterPayloadUtils.buildAttributeExportRoot(
+            FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
+            vault_Filters$isAttributeFilterBlacklist(),
+            vault_Filters$isAttributeFilterMatchAll(),
+            attributes,
+            legacyRaw ? FilterUiUtils.ATTRIBUTE_FORMAT_V1 : FilterUiUtils.ATTRIBUTE_FORMAT_V2
+        );
         try {
             String exportJson = pretty ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            if (legacyRaw) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.legacy", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            } else if (prettyV2) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.pretty", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            } else {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.minified", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            }
         } catch (Exception ignored) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
         }
@@ -314,13 +326,15 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         String importedName = null;
         boolean hasImportedBlacklist = false;
         boolean importedBlacklist = false;
+        boolean hasImportedMatchAll = false;
+        boolean importedMatchAll = false;
         try {
             JsonElement parsed = JsonParser.parseString(clipboard);
             if (parsed.isJsonObject()) {
                 JsonObject root = parsed.getAsJsonObject();
                 if (root.has(FilterUiUtils.FORMAT_FIELD)) {
                     String format = root.get(FilterUiUtils.FORMAT_FIELD).isJsonPrimitive() ? root.get(FilterUiUtils.FORMAT_FIELD).getAsString() : "";
-                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format)) {
+                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_V2.equals(format)) {
                         FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.version", format).withStyle(ChatFormatting.RED));
                         return;
                     }
@@ -332,10 +346,11 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                 if (root.has("name") && root.get("name").isJsonPrimitive()) {
                     importedName = root.get("name").getAsString();
                 }
-                if (root.has("isBlacklist") && root.get("isBlacklist").isJsonPrimitive()) {
-                    hasImportedBlacklist = true;
-                    importedBlacklist = root.get("isBlacklist").getAsBoolean();
-                }
+                FilterPayloadUtils.AttributeSettings attributeSettings = FilterPayloadUtils.readAttributeSettings(root);
+                hasImportedBlacklist = attributeSettings.hasBlacklist();
+                importedBlacklist = attributeSettings.blacklist();
+                hasImportedMatchAll = attributeSettings.hasMatchAll();
+                importedMatchAll = attributeSettings.matchAll();
                 array = root.getAsJsonArray(FilterUiUtils.ATTRIBUTES_FIELD);
             } else if (parsed.isJsonArray()) {
                 array = parsed.getAsJsonArray();
@@ -406,9 +421,8 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             FilterUiUtils.applyImportedFilterName((AbstractFilterMenu) this.menu, importedName);
         }
 
-        if (hasImportedBlacklist) {
-            vault_Filters$setAttributeFilterBlacklist(importedBlacklist);
-            AllPackets.getChannel().sendToServer(new FilterScreenPacket(importedBlacklist ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST, new CompoundTag()));
+        if (hasImportedBlacklist || hasImportedMatchAll) {
+            vault_Filters$setAttributeFilterMode(importedBlacklist, importedMatchAll);
         }
 
         int applied = 0;
@@ -426,9 +440,14 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$exportAvailableAttributes() {
-        boolean pretty = FilterUiUtils.isShiftDownSafe();
+        boolean shift = FilterUiUtils.isShiftDownSafe();
+        boolean ctrl = FilterUiUtils.isControlDownSafe();
+        boolean legacyRaw = shift && ctrl;
+        boolean minifiedV2 = shift && !ctrl;
+        boolean prettyV2 = !shift;
+        boolean pretty = !minifiedV2;
         JsonObject root = new JsonObject();
-        root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.ATTRIBUTE_FORMAT_V1);
+        root.addProperty(FilterUiUtils.FORMAT_FIELD, legacyRaw ? FilterUiUtils.ATTRIBUTE_FORMAT_V1 : FilterUiUtils.ATTRIBUTE_FORMAT_V2);
         JsonArray attributes = new JsonArray();
 
         for (ItemAttribute attribute : attributesOfItem) {
@@ -444,7 +463,13 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         try {
             String exportJson = pretty ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+            if (legacyRaw) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied.legacy", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+            } else if (prettyV2) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied.pretty", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+            } else {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export_available.copied.minified", attributesOfItem.size()).withStyle(ChatFormatting.GREEN));
+            }
         } catch (Exception ignored) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
         }
@@ -457,14 +482,8 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             StringBuilder tree = new StringBuilder();
 
             String rootName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
-            if (rootName == null || rootName.isBlank()) {
-                rootName = "Attribute Filter";
-            }
-
-            tree.append(rootName)
-                    .append(" (")
-                    .append(vault_Filters$isAttributeFilterBlacklist() ? "Deny" : "Allow")
-                    .append(")\n");
+            tree.append(FilterPayloadUtils.attributeTreeHeader(rootName, vault_Filters$isAttributeFilterBlacklist(), vault_Filters$isAttributeFilterMatchAll()))
+                    .append("\n");
 
             for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
                 CompoundTag tag = new CompoundTag();
@@ -502,19 +521,42 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     }
 
     @Unique
-    private boolean vault_Filters$isAttributeFilterBlacklist() {
+    private WhitelistMode vault_Filters$getAttributeFilterMode() {
         ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
         CompoundTag tag = contentHolder.getTag();
-        if (tag == null || !tag.contains("WhitelistMode")) {
-            return false;
+        if (tag == null || !tag.contains("WhitelistMode", Tag.TAG_INT)) {
+            return WhitelistMode.WHITELIST_DISJ;
         }
-        return !tag.getBoolean("WhitelistMode");
+        int ordinal = tag.getInt("WhitelistMode");
+        WhitelistMode[] values = WhitelistMode.values();
+        if (ordinal < 0 || ordinal >= values.length) {
+            return WhitelistMode.WHITELIST_DISJ;
+        }
+        return values[ordinal];
     }
 
     @Unique
-    private void vault_Filters$setAttributeFilterBlacklist(boolean blacklist) {
+    private boolean vault_Filters$isAttributeFilterBlacklist() {
+        return vault_Filters$getAttributeFilterMode() == WhitelistMode.BLACKLIST;
+    }
+
+    @Unique
+    private boolean vault_Filters$isAttributeFilterMatchAll() {
+        return vault_Filters$getAttributeFilterMode() == WhitelistMode.WHITELIST_CONJ;
+    }
+
+    @Unique
+    private void vault_Filters$setAttributeFilterMode(boolean blacklist, boolean matchAll) {
         ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
-        contentHolder.getOrCreateTag().putBoolean("WhitelistMode", !blacklist);
+        WhitelistMode mode = blacklist
+                ? WhitelistMode.BLACKLIST
+                : (matchAll ? WhitelistMode.WHITELIST_CONJ : WhitelistMode.WHITELIST_DISJ);
+        contentHolder.getOrCreateTag().putInt("WhitelistMode", mode.ordinal());
+        AllPackets.getChannel().sendToServer(new FilterScreenPacket(
+                mode == WhitelistMode.BLACKLIST ? FilterScreenPacket.Option.BLACKLIST
+                        : mode == WhitelistMode.WHITELIST_CONJ ? FilterScreenPacket.Option.WHITELIST2
+                        : FilterScreenPacket.Option.WHITELIST,
+                new CompoundTag()));
     }
 
 }

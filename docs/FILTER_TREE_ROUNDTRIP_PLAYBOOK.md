@@ -32,7 +32,7 @@ Tree Grammar Contract (expected from Tree export button)
 - List node line:
   - - Title (ModeLabel[, Respect NBT])
 - Attribute node line:
-  - - Title
+  - - Title (ModeLabel)
   - - key = value
   - - NOT key = value
 

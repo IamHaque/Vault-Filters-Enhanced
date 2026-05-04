@@ -31,6 +31,7 @@ public final class FilterUiUtils {
     public static final String LIST_FORMAT_V2 = "vaultfilters.list_filter.v2";
     public static final String LIST_FORMAT_V1 = "vaultfilters.list_filter.v1";
     public static final String ATTRIBUTE_FORMAT_V1 = "vaultfilters.attribute_filter.v1";
+    public static final String ATTRIBUTE_FORMAT_V2 = "vaultfilters.attribute_filter.v2";
     public static final String FORMAT_FIELD = "format";
     public static final String ATTRIBUTES_FIELD = "attributes";
 

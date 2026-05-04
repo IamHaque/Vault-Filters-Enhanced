@@ -23,6 +23,7 @@ import com.simibubi.create.foundation.utility.Lang;
 import net.joseph.vaultfilters.access.FilterMenuAdvancedAccessor;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
+import net.joseph.vaultfilters.util.FilterPayloadUtils;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -188,17 +189,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             boolean prettyJson = !minifiedV2;
             List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
 
-            JsonObject root = new JsonObject();
-            root.addProperty("format", legacyRaw ? FilterUiUtils.LIST_FORMAT_V1 : FilterUiUtils.LIST_FORMAT_V2);
-            String currentName = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
-            if (currentName != null && !currentName.isEmpty()) {
-                root.addProperty("name", currentName);
-            }
-            JsonObject filterObj = new JsonObject();
-            filterObj.addProperty("isBlacklist", menuAccessor.vault_filters$isBlacklist());
-            filterObj.addProperty("shouldRespectNBT", menuAccessor.vault_filters$shouldRespectNBT());
-            filterObj.addProperty("matchAll", menuAccessor.vault_filters$getMatchAll());
-
             JsonArray items = new JsonArray();
             for (FilterItemStack filter : filters) {
                 JsonObject item = vault_Filters$serializeFilterItem(filter, legacyRaw);
@@ -207,8 +197,14 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 }
             }
 
-            filterObj.add("items", items);
-            root.add("filter", filterObj);
+            JsonObject root = FilterPayloadUtils.buildListExportRoot(
+                    FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
+                    menuAccessor.vault_filters$isBlacklist(),
+                    menuAccessor.vault_filters$shouldRespectNBT(),
+                    menuAccessor.vault_filters$getMatchAll(),
+                    items,
+                    legacyRaw ? FilterUiUtils.LIST_FORMAT_V1 : FilterUiUtils.LIST_FORMAT_V2
+            );
 
             String exportJson = prettyJson ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
@@ -290,13 +286,12 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 rootName = "List Filter";
             }
 
-            tree.append(rootName)
-                    .append(" (")
-                    .append(vault_Filters$getModeLabel(menuAccessor.vault_filters$isBlacklist(), menuAccessor.vault_filters$getMatchAll()));
-            if (menuAccessor.vault_filters$shouldRespectNBT()) {
-                tree.append(", Respect NBT");
-            }
-            tree.append(")\n");
+                tree.append(FilterPayloadUtils.listTreeHeader(
+                    rootName,
+                    menuAccessor.vault_filters$isBlacklist(),
+                    menuAccessor.vault_filters$getMatchAll(),
+                    menuAccessor.vault_filters$shouldRespectNBT()))
+                    .append("\n");
 
             for (FilterItemStack filter : filters) {
                 vault_Filters$appendTreeNode(tree, filter, 1);
@@ -456,14 +451,13 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 return;
             }
 
-            boolean hasIsBlacklist = filterObj.has("isBlacklist") && filterObj.get("isBlacklist").isJsonPrimitive();
-            boolean hasShouldRespectNBT = filterObj.has("shouldRespectNBT") && filterObj.get("shouldRespectNBT").isJsonPrimitive();
-            boolean hasMatchAll = filterObj.has("matchAll") && filterObj.get("matchAll").isJsonPrimitive();
-            boolean isBlacklist = hasIsBlacklist && filterObj.get("isBlacklist").getAsBoolean();
-            boolean shouldRespectNBT = hasShouldRespectNBT && filterObj.get("shouldRespectNBT").getAsBoolean();
-            boolean matchAll = hasMatchAll && filterObj.get("matchAll").getAsBoolean();
+            FilterPayloadUtils.ListSettings listSettings = FilterPayloadUtils.readListSettings(filterObj);
 
             JsonArray items = filterObj.getAsJsonArray("items");
+            if (!FilterPayloadUtils.validateNestedListImport(items)) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
+                return;
+            }
             ItemStack contentHolder = ((AbstractFilterMenu) this.menu).contentHolder;
             ItemStackHandler handler = FilterItem.getFilterItems(contentHolder);
             int slotCount = handler.getSlots();
@@ -488,17 +482,17 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 return;
             }
 
-            if (hasIsBlacklist) {
-                menuAccessor.vault_filters$setBlacklist(isBlacklist);
-                AllPackets.getChannel().sendToServer(new FilterScreenPacket(isBlacklist ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST, new CompoundTag()));
+            if (listSettings.hasBlacklist()) {
+                menuAccessor.vault_filters$setBlacklist(listSettings.blacklist());
+                AllPackets.getChannel().sendToServer(new FilterScreenPacket(listSettings.blacklist() ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST, new CompoundTag()));
             }
-            if (hasShouldRespectNBT) {
-                menuAccessor.vault_filters$setRespectNBT(shouldRespectNBT);
-                AllPackets.getChannel().sendToServer(new FilterScreenPacket(shouldRespectNBT ? FilterScreenPacket.Option.RESPECT_DATA : FilterScreenPacket.Option.IGNORE_DATA, new CompoundTag()));
+            if (listSettings.hasRespectNBT()) {
+                menuAccessor.vault_filters$setRespectNBT(listSettings.respectNBT());
+                AllPackets.getChannel().sendToServer(new FilterScreenPacket(listSettings.respectNBT() ? FilterScreenPacket.Option.RESPECT_DATA : FilterScreenPacket.Option.IGNORE_DATA, new CompoundTag()));
             }
-            if (hasMatchAll) {
-                menuAccessor.vault_filters$setMatchAll(matchAll);
-                VFMessages.VFCHANNEL.sendToServer(new MenuFeaturesPacket(matchAll ? MenuFeaturesPacket.MenuAction.MATCH_ALL : MenuFeaturesPacket.MenuAction.MATCH_ANY));
+            if (listSettings.hasMatchAll()) {
+                menuAccessor.vault_filters$setMatchAll(listSettings.matchAll());
+                VFMessages.VFCHANNEL.sendToServer(new MenuFeaturesPacket(listSettings.matchAll() ? MenuFeaturesPacket.MenuAction.MATCH_ALL : MenuFeaturesPacket.MenuAction.MATCH_ANY));
             }
 
             if (!merge) {
