@@ -118,6 +118,14 @@ class FilterPayloadUtilsTest {
     }
 
     @Test
+    void attributeModeLabelMatchesListModeLabels() {
+        assertEquals("Allow Any", FilterPayloadUtils.attributeModeLabel(false, false));
+        assertEquals("Allow All", FilterPayloadUtils.attributeModeLabel(false, true));
+        assertEquals("Deny Any", FilterPayloadUtils.attributeModeLabel(true, false));
+        assertEquals("Deny All", FilterPayloadUtils.attributeModeLabel(true, true));
+    }
+
+    @Test
     void nestedListImportValidationAcceptsValidNestedPayload() {
         JsonArray rootItems = new JsonArray();
         JsonObject nestedList = new JsonObject();

@@ -326,7 +326,12 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
         if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
             String title = vault_Filters$getNodeTitle(filter, "Attribute Filter");
-            out.append(indent).append("- ").append(title).append("\n");
+            out.append(indent)
+                    .append("- ")
+                    .append(title)
+                    .append(" (")
+                    .append(vault_Filters$getAttributeModeLabel(attrFilter.item()))
+                    .append(")\n");
             vault_Filters$appendAttributeDetails(out, filter.item(), depth + 1);
             return;
         }
@@ -399,6 +404,31 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             return matchAll ? "Deny All" : "Deny Any";
         }
         return matchAll ? "Allow All" : "Allow Any";
+    }
+
+    @Unique
+    private String vault_Filters$getAttributeModeLabel(ItemStack item) {
+        if (item == null || item.isEmpty() || !item.hasTag()) {
+            return vault_Filters$getModeLabel(false, false);
+        }
+
+        CompoundTag tag = item.getTag();
+        if (tag == null || !tag.contains("WhitelistMode", Tag.TAG_INT)) {
+            return vault_Filters$getModeLabel(false, false);
+        }
+
+        int ordinal = tag.getInt("WhitelistMode");
+        FilterItemStack.AttributeFilterItemStack.WhitelistMode[] values = FilterItemStack.AttributeFilterItemStack.WhitelistMode.values();
+        if (ordinal < 0 || ordinal >= values.length) {
+            return vault_Filters$getModeLabel(false, false);
+        }
+
+        FilterItemStack.AttributeFilterItemStack.WhitelistMode mode = values[ordinal];
+        return mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST
+                ? vault_Filters$getModeLabel(true, false)
+            : mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ
+                ? vault_Filters$getModeLabel(false, true)
+                : vault_Filters$getModeLabel(false, false);
     }
 
     @Unique

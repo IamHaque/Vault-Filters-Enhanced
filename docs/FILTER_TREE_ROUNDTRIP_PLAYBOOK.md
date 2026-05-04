@@ -36,6 +36,8 @@ Tree Grammar Contract (expected from Tree export button)
   - - key = value
   - - NOT key = value
 
+ModeLabel is shown for both standalone attribute exports and attribute nodes nested inside list exports.
+
 Where ModeLabel is one of:
 
 - Allow All
