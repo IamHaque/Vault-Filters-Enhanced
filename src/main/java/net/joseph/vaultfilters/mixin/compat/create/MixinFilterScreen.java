@@ -183,19 +183,25 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         try {
             boolean shift = FilterUiUtils.isShiftDownSafe();
             boolean ctrl = FilterUiUtils.isControlDownSafe();
-            boolean legacyRaw = shift && ctrl;
-            boolean minifiedV2 = shift && !ctrl;
-            boolean prettyV2 = !shift;
-            boolean prettyJson = !minifiedV2;
+            boolean alt = FilterUiUtils.isAltDownSafe();
+            boolean simplifiedFormat = !shift && !ctrl && !alt;  // DEFAULT: No modifier
+            boolean prettyV2 = shift && !ctrl && !alt;           // Shift
+            boolean minifiedV2 = shift && ctrl && !alt;          // Shift+Ctrl
+            boolean legacyRaw = alt;                             // Alt
+            boolean prettyJson = prettyV2 || (!minifiedV2 && !legacyRaw);
+
             List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
 
             JsonArray items = new JsonArray();
             for (FilterItemStack filter : filters) {
-                JsonObject item = vault_Filters$serializeFilterItem(filter, legacyRaw);
+                JsonObject item = vault_Filters$serializeFilterItem(filter, legacyRaw, simplifiedFormat);
                 if (item != null) {
                     items.add(item);
                 }
             }
+
+            String format = simplifiedFormat ? FilterUiUtils.LIST_FORMAT_SIMPLIFIED :
+                           (legacyRaw ? FilterUiUtils.LIST_FORMAT_V1 : FilterUiUtils.LIST_FORMAT_V2);
 
             JsonObject root = FilterPayloadUtils.buildListExportRoot(
                     FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
@@ -203,17 +209,19 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     menuAccessor.vault_filters$shouldRespectNBT(),
                     menuAccessor.vault_filters$getMatchAll(),
                     items,
-                    legacyRaw ? FilterUiUtils.LIST_FORMAT_V1 : FilterUiUtils.LIST_FORMAT_V2
+                    format
             );
 
             String exportJson = prettyJson ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-            if (legacyRaw) {
-                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.legacy", filters.size()).withStyle(ChatFormatting.GREEN));
+            if (simplifiedFormat) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.simplified", filters.size()).withStyle(ChatFormatting.GREEN));
             } else if (prettyV2) {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.pretty", filters.size()).withStyle(ChatFormatting.GREEN));
-            } else {
+            } else if (minifiedV2) {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.minified", filters.size()).withStyle(ChatFormatting.GREEN));
+            } else if (legacyRaw) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.exported.legacy", filters.size()).withStyle(ChatFormatting.GREEN));
             }
         } catch (Exception e) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.export.invalid").withStyle(ChatFormatting.RED));
@@ -221,7 +229,48 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
     }
 
     @Unique
-    private JsonObject vault_Filters$serializeFilterItem(FilterItemStack filter, boolean legacyRaw) {
+    private JsonObject vault_Filters$serializeFilterItemSimplified(FilterItemStack filter) {
+        JsonObject obj = new JsonObject();
+
+        String customName = vault_Filters$getCustomFilterName(filter);
+        if (customName != null) {
+            obj.addProperty("name", customName);
+        }
+
+        if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
+            obj.addProperty("type", "attribute_filter");
+            obj.addProperty("isBlacklist", vault_Filters$isAttributeFilterBlacklist(attrFilter.item()));
+            obj.addProperty("matchAll", vault_Filters$isAttributeFilterMatchAll(attrFilter.item()));
+            obj.add("attributes", vault_Filters$serializeMatchedAttributes(attrFilter.item()));
+        } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
+            obj.addProperty("type", "list_filter");
+            obj.addProperty("isBlacklist", listFilter.isBlacklist);
+            obj.addProperty("shouldRespectNBT", listFilter.shouldRespectNBT);
+            if (listFilter.item().hasTag()) {
+                obj.addProperty("matchAll", listFilter.item().getTag().getBoolean("MatchAll"));
+            }
+            JsonArray nestedItems = new JsonArray();
+            for (FilterItemStack item : listFilter.containedItems) {
+                JsonObject nested = vault_Filters$serializeFilterItemSimplified(item);
+                if (nested != null) nestedItems.add(nested);
+            }
+            obj.add("items", nestedItems);
+        } else if (!filter.isEmpty()) {
+            obj.addProperty("type", "item_filter");
+            obj.add("stack", FilterPayloadUtils.tagToJson(filter.serializeNBT()));
+        } else {
+            return null;
+        }
+
+        return obj;
+    }
+
+    @Unique
+    private JsonObject vault_Filters$serializeFilterItem(FilterItemStack filter, boolean legacyRaw, boolean simplifiedFormat) {
+        if (simplifiedFormat) {
+            return vault_Filters$serializeFilterItemSimplified(filter);
+        }
+
         JsonObject obj = new JsonObject();
 
         String customName = legacyRaw ? null : vault_Filters$getCustomFilterName(filter);
@@ -252,7 +301,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             obj.addProperty("type", "list_filter");
             JsonArray nestedItems = new JsonArray();
             for (FilterItemStack item : listFilter.containedItems) {
-                JsonObject nested = vault_Filters$serializeFilterItem(item, legacyRaw);
+                JsonObject nested = vault_Filters$serializeFilterItem(item, legacyRaw, simplifiedFormat);
                 if (nested != null) nestedItems.add(nested);
             }
             obj.add("items", nestedItems);
@@ -432,6 +481,30 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
     }
 
     @Unique
+    private boolean vault_Filters$isAttributeFilterBlacklist(ItemStack item) {
+        if (item == null || item.isEmpty() || !item.hasTag()) {
+            return false;
+        }
+
+        CompoundTag tag = item.getTag();
+        return tag != null
+                && tag.contains("WhitelistMode", Tag.TAG_INT)
+                && tag.getInt("WhitelistMode") == FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST.ordinal();
+    }
+
+    @Unique
+    private boolean vault_Filters$isAttributeFilterMatchAll(ItemStack item) {
+        if (item == null || item.isEmpty() || !item.hasTag()) {
+            return false;
+        }
+
+        CompoundTag tag = item.getTag();
+        return tag != null
+                && tag.contains("WhitelistMode", Tag.TAG_INT)
+                && tag.getInt("WhitelistMode") == FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ.ordinal();
+    }
+
+    @Unique
     private void vault_Filters$importFromClipboard() {
         boolean merge = FilterUiUtils.isShiftDownSafe();
         String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
@@ -459,7 +532,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 }
 
                 String format = root.get("format").getAsString();
-                if (!FilterUiUtils.LIST_FORMAT_V2.equals(format) && !FilterUiUtils.LIST_FORMAT_V1.equals(format)) {
+                if (!FilterUiUtils.LIST_FORMAT_V2.equals(format) && !FilterUiUtils.LIST_FORMAT_V1.equals(format) && !FilterUiUtils.LIST_FORMAT_SIMPLIFIED.equals(format)) {
                     FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.version").withStyle(ChatFormatting.RED));
                     return;
                 }
@@ -577,10 +650,23 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         if (!obj.has("type") || !obj.get("type").isJsonPrimitive()) return null;
         String type = obj.get("type").getAsString();
         String name = vault_Filters$getJsonString(obj, "name");
-        String nbtString = vault_Filters$getNbtString(obj);
+        if ("attribute_filter".equals(type)) {
+            return vault_Filters$buildAttributeFilterTagFromJson(obj, name);
+        }
 
-        if (("attribute_filter".equals(type) || "item_filter".equals(type)) && nbtString != null) {
-            CompoundTag parsed = TagParser.parseTag(nbtString);
+        if ("item_filter".equals(type)) {
+            String nbtString = vault_Filters$getNbtString(obj);
+            JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
+            CompoundTag parsed;
+            if (stackPayload != null) {
+                parsed = stackPayload.isJsonPrimitive()
+                        ? TagParser.parseTag(stackPayload.getAsString())
+                        : FilterPayloadUtils.jsonToCompoundTag(stackPayload);
+            } else if (nbtString != null) {
+                parsed = TagParser.parseTag(nbtString);
+            } else {
+                return null;
+            }
             return vault_Filters$applyNameToSerializedStack(parsed, name);
         }
 
@@ -588,58 +674,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             return null;
         }
 
-        boolean hasNbt = nbtString != null;
-        boolean hasItems = obj.has("items") && obj.get("items").isJsonArray();
-        if (!hasNbt && !hasItems) {
-            return null;
-        }
-
-        ItemStack listStack = hasNbt
-            ? ItemStack.of(TagParser.parseTag(nbtString))
-                : AllItems.FILTER.asStack();
-        if (listStack.isEmpty()) {
-            listStack = AllItems.FILTER.asStack();
-        }
-
-        CompoundTag listTag = listStack.getOrCreateTag();
-        if (obj.has("isBlacklist") && obj.get("isBlacklist").isJsonPrimitive()) {
-            listTag.putBoolean("Blacklist", obj.get("isBlacklist").getAsBoolean());
-        }
-        if (obj.has("shouldRespectNBT") && obj.get("shouldRespectNBT").isJsonPrimitive()) {
-            listTag.putBoolean("RespectNBT", obj.get("shouldRespectNBT").getAsBoolean());
-        }
-        if (obj.has("matchAll") && obj.get("matchAll").isJsonPrimitive()) {
-            listTag.putBoolean("MatchAll", obj.get("matchAll").getAsBoolean());
-        }
-
-        if (hasItems) {
-            ItemStackHandler handler = FilterItem.getFilterItems(listStack);
-            JsonArray nested = obj.getAsJsonArray("items");
-            int slot = 0;
-            for (JsonElement nestedElement : nested) {
-                if (!nestedElement.isJsonObject()) {
-                    continue;
-                }
-                JsonObject nestedObject = nestedElement.getAsJsonObject();
-                CompoundTag childTag = vault_Filters$buildFilterTagFromJson(nestedObject);
-                if (childTag == null) {
-                    continue;
-                }
-                if (slot >= handler.getSlots()) {
-                    break;
-                }
-                handler.setStackInSlot(slot++, ItemStack.of(childTag));
-            }
-
-            // Persist reconstructed nested filters explicitly for v2 payloads.
-            listTag.put("Items", handler.serializeNBT());
-        }
-
-        if (name != null && !name.isBlank()) {
-            listStack.setHoverName(new TextComponent(name));
-        }
-
-        return listStack.serializeNBT();
+        return vault_Filters$buildListFilterTagFromJson(obj, name);
     }
 
     @Unique
@@ -699,6 +734,154 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         }
 
         return null;
+    }
+
+    @Unique
+    private JsonArray vault_Filters$serializeMatchedAttributes(ItemStack itemStack) {
+        JsonArray attributes = new JsonArray();
+        if (itemStack == null || itemStack.isEmpty() || !itemStack.hasTag()) {
+            return attributes;
+        }
+
+        CompoundTag tag = itemStack.getTag();
+        if (tag == null || !tag.contains("MatchedAttributes", Tag.TAG_LIST)) {
+            return attributes;
+        }
+
+        ListTag matchedAttributes = tag.getList("MatchedAttributes", Tag.TAG_COMPOUND);
+        for (int index = 0; index < matchedAttributes.size(); index++) {
+            Tag entryTag = matchedAttributes.get(index);
+            if (!(entryTag instanceof CompoundTag entry)) {
+                continue;
+            }
+
+            JsonObject attributeEntry = new JsonObject();
+            boolean inverted = entry.contains("Inverted", Tag.TAG_BYTE) && entry.getBoolean("Inverted");
+            attributeEntry.addProperty("inverted", inverted);
+
+            CompoundTag structuredEntry = entry.copy();
+            structuredEntry.remove("Inverted");
+            attributeEntry.add("attribute", FilterPayloadUtils.tagToJson(structuredEntry));
+            attributes.add(attributeEntry);
+        }
+
+        return attributes;
+    }
+
+    @Unique
+    private CompoundTag vault_Filters$buildAttributeFilterTagFromJson(JsonObject obj, String name) throws Exception {
+        ItemStack attributeStack = AllItems.ATTRIBUTE_FILTER.asStack();
+        CompoundTag tag = attributeStack.getOrCreateTag();
+
+        boolean hasBlacklist = obj.has("isBlacklist") && obj.get("isBlacklist").isJsonPrimitive();
+        boolean hasMatchAll = obj.has("matchAll") && obj.get("matchAll").isJsonPrimitive();
+        boolean blacklist = hasBlacklist && obj.get("isBlacklist").getAsBoolean();
+        boolean matchAll = hasMatchAll && obj.get("matchAll").getAsBoolean();
+        FilterItemStack.AttributeFilterItemStack.WhitelistMode mode = blacklist
+                ? FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST
+                : (matchAll ? FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ
+                : FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_DISJ);
+        tag.putInt("WhitelistMode", mode.ordinal());
+
+        ListTag matchedAttributes = new ListTag();
+        JsonArray attributes = obj.has("attributes") && obj.get("attributes").isJsonArray() ? obj.getAsJsonArray("attributes") : new JsonArray();
+        for (JsonElement attributeElement : attributes) {
+            if (!attributeElement.isJsonObject()) {
+                continue;
+            }
+
+            JsonObject attributeObj = attributeElement.getAsJsonObject();
+            boolean inverted = attributeObj.has("inverted") && attributeObj.get("inverted").getAsBoolean();
+            JsonElement payload = attributeObj.has("attribute") ? attributeObj.get("attribute") : null;
+            if (payload == null && attributeObj.has("nbt") && attributeObj.get("nbt").isJsonPrimitive()) {
+                payload = attributeObj.get("nbt");
+            }
+            if (payload == null) {
+                continue;
+            }
+
+            CompoundTag entryTag = payload.isJsonPrimitive()
+                    ? TagParser.parseTag(payload.getAsString())
+                    : FilterPayloadUtils.jsonToCompoundTag(payload);
+            if (entryTag.isEmpty()) {
+                continue;
+            }
+
+            entryTag.putBoolean("Inverted", inverted);
+            matchedAttributes.add(entryTag);
+        }
+
+        if (!matchedAttributes.isEmpty()) {
+            tag.put("MatchedAttributes", matchedAttributes);
+        }
+
+        if (name != null && !name.isBlank()) {
+            attributeStack.setHoverName(new TextComponent(name));
+        }
+
+        return attributeStack.serializeNBT();
+    }
+
+    @Unique
+    private CompoundTag vault_Filters$buildListFilterTagFromJson(JsonObject obj, String name) throws Exception {
+        JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
+        String nbtString = vault_Filters$getNbtString(obj);
+
+        ItemStack listStack;
+        if (stackPayload != null) {
+            listStack = stackPayload.isJsonPrimitive()
+                    ? ItemStack.of(TagParser.parseTag(stackPayload.getAsString()))
+                    : ItemStack.of(FilterPayloadUtils.jsonToCompoundTag(stackPayload));
+        } else if (nbtString != null) {
+            listStack = ItemStack.of(TagParser.parseTag(nbtString));
+        } else {
+            listStack = AllItems.FILTER.asStack();
+        }
+
+        if (listStack.isEmpty()) {
+            listStack = AllItems.FILTER.asStack();
+        }
+
+        CompoundTag listTag = listStack.getOrCreateTag();
+        if (obj.has("isBlacklist") && obj.get("isBlacklist").isJsonPrimitive()) {
+            listTag.putBoolean("Blacklist", obj.get("isBlacklist").getAsBoolean());
+        }
+        if (obj.has("shouldRespectNBT") && obj.get("shouldRespectNBT").isJsonPrimitive()) {
+            listTag.putBoolean("RespectNBT", obj.get("shouldRespectNBT").getAsBoolean());
+        }
+        if (obj.has("matchAll") && obj.get("matchAll").isJsonPrimitive()) {
+            listTag.putBoolean("MatchAll", obj.get("matchAll").getAsBoolean());
+        }
+
+        if (obj.has("items") && obj.get("items").isJsonArray()) {
+            ItemStackHandler handler = FilterItem.getFilterItems(listStack);
+            JsonArray nested = obj.getAsJsonArray("items");
+            int slot = 0;
+            for (JsonElement nestedElement : nested) {
+                if (!nestedElement.isJsonObject()) {
+                    continue;
+                }
+
+                CompoundTag childTag = vault_Filters$buildFilterTagFromJson(nestedElement.getAsJsonObject());
+                if (childTag == null) {
+                    continue;
+                }
+
+                if (slot >= handler.getSlots()) {
+                    break;
+                }
+
+                handler.setStackInSlot(slot++, ItemStack.of(childTag));
+            }
+
+            listTag.put("Items", handler.serializeNBT());
+        }
+
+        if (name != null && !name.isBlank()) {
+            listStack.setHoverName(new TextComponent(name));
+        }
+
+        return listStack.serializeNBT();
     }
 
     @Unique

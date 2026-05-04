@@ -1,6 +1,19 @@
 # Filter Tree Roundtrip Playbook
 
-Purpose
+## Format Recommendation
+
+**Simplified format (default) is now the recommended export format.** See [EXPORT_IMPORT_GUIDE.md](EXPORT_IMPORT_GUIDE.md) for detailed export options and keyboard modifiers.
+
+- Default (no modifier): **Simplified** ⭐ Recommended
+- Shift: V2 Pretty
+- Shift+Ctrl: V2 Minified
+- Alt: V1 Legacy
+
+All formats support full round-trip import/export workflows.
+
+---
+
+## Purpose
 
 - Preserve the workflow for rebuilding a valid importable filter JSON from:
   1. original JSON export,
@@ -10,7 +23,7 @@ Purpose
 Scope
 
 - Applies to list filter payloads exported by Vault Filters Enhanced.
-- Works with V2 and legacy payloads. Preferred output is V2.
+- Works with Simplified, V2, and legacy V1 payloads. **Preferred output is Simplified.**
 - Tree export is available in both List Filter and Attribute Filter UIs.
 - This playbook is focused on list filter JSON roundtrip generation.
 

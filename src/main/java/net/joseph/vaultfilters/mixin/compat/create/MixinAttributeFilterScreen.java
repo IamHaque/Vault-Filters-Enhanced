@@ -271,10 +271,13 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     private void vault_Filters$exportToClipboard() {
         boolean shift = FilterUiUtils.isShiftDownSafe();
         boolean ctrl = FilterUiUtils.isControlDownSafe();
-        boolean legacyRaw = shift && ctrl;
-        boolean minifiedV2 = shift && !ctrl;
-        boolean prettyV2 = !shift;
-        boolean pretty = !minifiedV2;
+        boolean alt = FilterUiUtils.isAltDownSafe();
+        boolean simplifiedFormat = !shift && !ctrl && !alt;  // DEFAULT: No modifier
+        boolean prettyV2 = shift && !ctrl && !alt;           // Shift
+        boolean minifiedV2 = shift && ctrl && !alt;          // Shift+Ctrl
+        boolean legacyRaw = alt;                             // Alt
+        boolean prettyJson = prettyV2 || (!minifiedV2 && !simplifiedFormat && !legacyRaw);
+
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
         JsonArray attributes = new JsonArray();
 
@@ -283,26 +286,37 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             pair.getFirst().serializeNBT(tag);
             JsonObject entry = new JsonObject();
             entry.addProperty("inverted", pair.getSecond());
-            entry.addProperty("nbt", tag.toString());
+
+            if (simplifiedFormat) {
+                entry.add("attribute", FilterPayloadUtils.tagToJson(tag));
+            } else {
+                entry.addProperty("nbt", tag.toString());
+            }
+
             attributes.add(entry);
         }
+
+        String format = simplifiedFormat ? FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED :
+                       (legacyRaw ? FilterUiUtils.ATTRIBUTE_FORMAT_V1 : FilterUiUtils.ATTRIBUTE_FORMAT_V2);
 
         JsonObject root = FilterPayloadUtils.buildAttributeExportRoot(
             FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
             vault_Filters$isAttributeFilterBlacklist(),
             vault_Filters$isAttributeFilterMatchAll(),
             attributes,
-            legacyRaw ? FilterUiUtils.ATTRIBUTE_FORMAT_V1 : FilterUiUtils.ATTRIBUTE_FORMAT_V2
+            format
         );
         try {
-            String exportJson = pretty ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
+            String exportJson = prettyJson ? FilterUiUtils.PRETTY_GSON.toJson(root) : FilterUiUtils.GSON.toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(exportJson);
-            if (legacyRaw) {
-                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.legacy", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            if (simplifiedFormat) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.simplified", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
             } else if (prettyV2) {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.pretty", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
-            } else {
+            } else if (minifiedV2) {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.minified", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
+            } else if (legacyRaw) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.exported.legacy", currentAttributes.size()).withStyle(ChatFormatting.GREEN));
             }
         } catch (Exception ignored) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.export.invalid").withStyle(ChatFormatting.RED));
@@ -334,7 +348,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                 JsonObject root = parsed.getAsJsonObject();
                 if (root.has(FilterUiUtils.FORMAT_FIELD)) {
                     String format = root.get(FilterUiUtils.FORMAT_FIELD).isJsonPrimitive() ? root.get(FilterUiUtils.FORMAT_FIELD).getAsString() : "";
-                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_V2.equals(format)) {
+                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_V2.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED.equals(format)) {
                         FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.version", format).withStyle(ChatFormatting.RED));
                         return;
                     }
@@ -374,15 +388,26 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             }
 
             JsonObject entry = element.getAsJsonObject();
-            if (!entry.has("nbt") || !entry.get("nbt").isJsonPrimitive()) {
+            JsonElement payload = null;
+            if (entry.has("nbt") && entry.get("nbt").isJsonPrimitive()) {
+                payload = entry.get("nbt");
+            } else if (entry.has("attribute") && entry.get("attribute").isJsonObject()) {
+                payload = entry.get("attribute");
+            }
+
+            if (payload == null) {
                 invalid++;
                 continue;
             }
 
-            String nbtData = entry.get("nbt").getAsString();
             boolean inverted = entry.has("inverted") && entry.get("inverted").getAsBoolean();
             try {
-                CompoundTag tag = TagParser.parseTag(nbtData);
+                CompoundTag tag;
+                if (payload.isJsonPrimitive()) {
+                    tag = TagParser.parseTag(payload.getAsString());
+                } else {
+                    tag = FilterPayloadUtils.jsonToCompoundTag(payload);
+                }
                 ItemAttribute attribute = ItemAttribute.fromNBT(tag);
                 if (attribute == null) {
                     invalid++;

@@ -2,6 +2,9 @@ package net.joseph.vaultfilters.util;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -123,6 +126,24 @@ class FilterPayloadUtilsTest {
         assertEquals("Allow All", FilterPayloadUtils.attributeModeLabel(false, true));
         assertEquals("Deny Any", FilterPayloadUtils.attributeModeLabel(true, false));
         assertEquals("Deny All", FilterPayloadUtils.attributeModeLabel(true, true));
+    }
+
+    @Test
+    void jsonBridgeRoundTripsNestedCompoundAndListValues() {
+        CompoundTag root = new CompoundTag();
+        CompoundTag nested = new CompoundTag();
+        nested.putString("card_color", "GREEN");
+        root.put("attribute", nested);
+
+        ListTag list = new ListTag();
+        list.add(nested.copy());
+        root.put("attributes", list);
+
+        JsonObject json = FilterPayloadUtils.tagToJson(root).getAsJsonObject();
+        CompoundTag roundTrip = FilterPayloadUtils.jsonToCompoundTag(json);
+
+        assertEquals("GREEN", roundTrip.getCompound("attribute").getString("card_color"));
+        assertTrue(roundTrip.contains("attributes", Tag.TAG_LIST));
     }
 
     @Test
