@@ -761,7 +761,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
             CompoundTag structuredEntry = entry.copy();
             structuredEntry.remove("Inverted");
-            attributeEntry.add("attribute", FilterPayloadUtils.tagToJson(structuredEntry));
+            attributeEntry.add("attribute", FilterPayloadUtils.attributeTagToJson(structuredEntry));
             attributes.add(attributeEntry);
         }
 
@@ -805,6 +805,12 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     : FilterPayloadUtils.jsonToCompoundTag(payload);
             if (entryTag.isEmpty()) {
                 continue;
+            }
+
+            // Normalize flattened attribute objects into the nested CompoundTag format
+            // Create expects for MatchedAttributes.
+            if (!payload.isJsonPrimitive()) {
+                entryTag = FilterPayloadUtils.expandFlattenedAttributeCompound(entryTag);
             }
 
             entryTag.putBoolean("Inverted", inverted);

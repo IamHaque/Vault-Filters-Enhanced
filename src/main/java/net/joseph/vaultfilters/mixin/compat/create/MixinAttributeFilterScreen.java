@@ -288,7 +288,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             entry.addProperty("inverted", pair.getSecond());
 
             if (simplifiedFormat) {
-                entry.add("attribute", FilterPayloadUtils.tagToJson(tag));
+                entry.add("attribute", FilterPayloadUtils.attributeTagToJson(tag));
             } else {
                 entry.addProperty("nbt", tag.toString());
             }
@@ -407,6 +407,9 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                     tag = TagParser.parseTag(payload.getAsString());
                 } else {
                     tag = FilterPayloadUtils.jsonToCompoundTag(payload);
+                    // Expand flattened attribute JSON { key: value } into nested CompoundTag
+                    // { key: { key: value } } expected by ItemAttribute.fromNBT
+                    tag = FilterPayloadUtils.expandFlattenedAttributeCompound(tag);
                 }
                 ItemAttribute attribute = ItemAttribute.fromNBT(tag);
                 if (attribute == null) {

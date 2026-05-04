@@ -180,4 +180,47 @@ class FilterPayloadUtilsTest {
 
         assertFalse(FilterPayloadUtils.validateNestedListImport(items));
     }
+
+    @Test
+    void attributeFlatteningDoesNotBreakRoundTripImport() {
+        // Build a CompoundTag that uses the nested duplicate-key shape produced by some attributes
+        CompoundTag root = new CompoundTag();
+        CompoundTag inner = new CompoundTag();
+        inner.putString("card_color", "GREEN");
+        // nested under same key
+        CompoundTag wrapper = new CompoundTag();
+        wrapper.put("card_color", inner);
+        root.put("MatchedAttributes", new ListTag());
+
+        // Use the helper to produce JSON as exported by the UI
+        JsonObject exported = FilterPayloadUtils.tagToJson(wrapper).getAsJsonObject();
+
+        // Flatten via attributeTagToJson (what exporter now does)
+        JsonObject flattened = FilterPayloadUtils.attributeTagToJson(wrapper).getAsJsonObject();
+
+        // Ensure flattened shape no longer has nested duplicate
+        assertTrue(flattened.has("card_color"));
+        assertFalse(flattened.get("card_color").isJsonObject());
+
+        // Ensure importer can turn flattened JSON back into a CompoundTag
+        CompoundTag reconstructed = FilterPayloadUtils.jsonToCompoundTag(flattened);
+        assertEquals("GREEN", reconstructed.getString("card_color"));
+    }
+
+    @Test
+    void simplifiedAttributeExportImportRoundTrip() {
+        // Simulate simplified exported attribute JSON { "card_color": "GREEN" }
+        com.google.gson.JsonObject flat = new com.google.gson.JsonObject();
+        flat.addProperty("card_color", "GREEN");
+
+        CompoundTag parsed = FilterPayloadUtils.jsonToCompoundTag(flat);
+        CompoundTag expanded = FilterPayloadUtils.expandFlattenedAttributeCompound(parsed);
+
+        // Expanded should be { card_color: { card_color: "GREEN" } }
+        CompoundTag inner = expanded.getCompound("card_color");
+        assertEquals("GREEN", inner.getString("card_color"));
+
+        // We don't call Create's parser here (may require game env); verifying
+        // the expanded CompoundTag shape matches the legacy nested form is sufficient.
+    }
 }

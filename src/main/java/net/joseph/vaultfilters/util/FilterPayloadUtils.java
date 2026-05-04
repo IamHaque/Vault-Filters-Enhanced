@@ -229,6 +229,34 @@ public final class FilterPayloadUtils {
         return new JsonPrimitive(tag.getAsString());
     }
 
+    /**
+     * Normalize attribute JSON emitted from attribute tags to avoid duplicated
+     * nested keys like { "card_color": { "card_color": "GREEN" } }.
+     *
+     * If the element is an object with a single key K whose value is an object
+     * with a single key also named K, this collapses it to { K: innerValue }.
+     */
+    public static JsonElement attributeTagToJson(Tag tag) {
+        JsonElement elem = tagToJson(tag);
+        if (!elem.isJsonObject()) return elem;
+
+        JsonObject obj = elem.getAsJsonObject();
+        if (obj.entrySet().size() != 1) return obj;
+
+        String key = obj.keySet().iterator().next();
+        JsonElement val = obj.get(key);
+        if (!val.isJsonObject()) return obj;
+
+        JsonObject inner = val.getAsJsonObject();
+        if (inner.entrySet().size() != 1) return obj;
+        if (!inner.has(key)) return obj;
+
+        JsonElement innerVal = inner.get(key);
+        JsonObject collapsed = new JsonObject();
+        collapsed.add(key, innerVal);
+        return collapsed;
+    }
+
     public static Tag jsonToTag(JsonElement element) {
         if (element == null || element.isJsonNull()) {
             return StringTag.valueOf("");
@@ -276,6 +304,26 @@ public final class FilterPayloadUtils {
     public static CompoundTag jsonToCompoundTag(JsonElement element) {
         Tag tag = jsonToTag(element);
         return tag instanceof CompoundTag compoundTag ? compoundTag : new CompoundTag();
+    }
+
+    /**
+     * If a CompoundTag represents a flattened attribute like { key: primitive }
+     * expand it into the nested shape { key: { key: primitive } } which is
+     * what Create's attribute parser expects inside MatchedAttributes.
+     */
+    public static CompoundTag expandFlattenedAttributeCompound(CompoundTag tag) {
+        if (tag == null) return new CompoundTag();
+        if (tag.getAllKeys().size() != 1) return tag;
+
+        String k = tag.getAllKeys().iterator().next();
+        Tag v = tag.get(k);
+        if (v instanceof CompoundTag) return tag;
+
+        CompoundTag inner = new CompoundTag();
+        inner.put(k, v);
+        CompoundTag outer = new CompoundTag();
+        outer.put(k, inner);
+        return outer;
     }
 
     public static String listModeLabel(boolean isBlacklist, boolean matchAll) {
