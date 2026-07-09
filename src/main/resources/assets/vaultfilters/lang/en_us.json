@@ -403,5 +403,15 @@
   "vaultfilters.gui.list_filter.import.too_large": "Clipboard payload is too large (%1$s chars max)",
   "vaultfilters.gui.list_filter.import.version": "Unsupported list filter format",
   "vaultfilters.gui.list_filter.import.invalid": "Clipboard does not contain a valid list filter payload",
-  "vaultfilters.gui.list_filter.import.none": "No valid filters were found in clipboard data"
+  "vaultfilters.gui.list_filter.import.none": "No valid filters were found in clipboard data",
+
+  "vaultfilters.screen.filter_library": "Filter Library",
+  "vaultfilters.screen.filter_library.empty": "No saved filters",
+
+  "vaultfilters.gui.library.import": "Imp",
+  "vaultfilters.gui.library.rename": "Ren",
+  "vaultfilters.gui.library.duplicate": "Dup",
+  "vaultfilters.gui.library.export": "Exp",
+  "vaultfilters.gui.library.tree": "Tree",
+  "vaultfilters.gui.library.delete": "Del"
 }
