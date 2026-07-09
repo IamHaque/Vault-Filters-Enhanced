@@ -272,29 +272,14 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         boolean shift = FilterUiUtils.isShiftDownSafe();
         boolean ctrl = FilterUiUtils.isControlDownSafe();
         boolean alt = FilterUiUtils.isAltDownSafe();
-        boolean simplifiedFormat = !shift && !ctrl && !alt;  // DEFAULT: No modifier
-        boolean prettyV2 = shift && !ctrl && !alt;           // Shift
-        boolean minifiedV2 = shift && ctrl && !alt;          // Shift+Ctrl
-        boolean legacyRaw = alt;                             // Alt
+        boolean simplifiedFormat = !shift && !ctrl && !alt;
+        boolean prettyV2 = shift && !ctrl && !alt;
+        boolean minifiedV2 = shift && ctrl && !alt;
+        boolean legacyRaw = alt;
         boolean prettyJson = prettyV2 || (!minifiedV2 && !simplifiedFormat && !legacyRaw);
 
         List<Pair<ItemAttribute, Boolean>> currentAttributes = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
-        JsonArray attributes = new JsonArray();
-
-        for (Pair<ItemAttribute, Boolean> pair : currentAttributes) {
-            CompoundTag tag = new CompoundTag();
-            pair.getFirst().serializeNBT(tag);
-            JsonObject entry = new JsonObject();
-            entry.addProperty("inverted", pair.getSecond());
-
-            if (simplifiedFormat) {
-                entry.add("attribute", FilterPayloadUtils.attributeTagToJson(tag));
-            } else {
-                entry.addProperty("nbt", tag.toString());
-            }
-
-            attributes.add(entry);
-        }
+        JsonArray attributes = FilterPayloadUtils.buildAttributeEntries(currentAttributes, simplifiedFormat);
 
         String format = simplifiedFormat ? FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED :
                        (legacyRaw ? FilterUiUtils.ATTRIBUTE_FORMAT_V1 : FilterUiUtils.ATTRIBUTE_FORMAT_V2);
@@ -336,38 +321,62 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             return;
         }
 
-        JsonArray array;
-        String importedName = null;
-        boolean hasImportedBlacklist = false;
-        boolean importedBlacklist = false;
-        boolean hasImportedMatchAll = false;
-        boolean importedMatchAll = false;
+        String importedName;
+        boolean hasImportedBlacklist;
+        boolean importedBlacklist;
+        boolean hasImportedMatchAll;
+        boolean importedMatchAll;
+        List<Pair<ItemAttribute, Boolean>> imported;
+        int invalid;
+        int duplicates;
+
         try {
             JsonElement parsed = JsonParser.parseString(clipboard);
             if (parsed.isJsonObject()) {
                 JsonObject root = parsed.getAsJsonObject();
-                if (root.has(FilterUiUtils.FORMAT_FIELD)) {
-                    String format = root.get(FilterUiUtils.FORMAT_FIELD).isJsonPrimitive() ? root.get(FilterUiUtils.FORMAT_FIELD).getAsString() : "";
-                    if (!FilterUiUtils.ATTRIBUTE_FORMAT_V1.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_V2.equals(format) && !FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED.equals(format)) {
-                        FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.version", format).withStyle(ChatFormatting.RED));
-                        return;
-                    }
-                }
-                if (!root.has(FilterUiUtils.ATTRIBUTES_FIELD) || !root.get(FilterUiUtils.ATTRIBUTES_FIELD).isJsonArray()) {
+                FilterPayloadUtils.AttributeImportResult result = FilterPayloadUtils.parseAttributeImport(root);
+                imported = result.attributes();
+                importedName = result.name();
+                hasImportedBlacklist = result.hasBlacklist();
+                importedBlacklist = result.blacklist();
+                hasImportedMatchAll = result.hasMatchAll();
+                importedMatchAll = result.matchAll();
+                invalid = result.invalid();
+                duplicates = result.duplicates();
+                if (imported.isEmpty() && result.invalid() == 0 && result.duplicates() == 0) {
                     FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
                     return;
                 }
-                if (root.has("name") && root.get("name").isJsonPrimitive()) {
-                    importedName = root.get("name").getAsString();
-                }
-                FilterPayloadUtils.AttributeSettings attributeSettings = FilterPayloadUtils.readAttributeSettings(root);
-                hasImportedBlacklist = attributeSettings.hasBlacklist();
-                importedBlacklist = attributeSettings.blacklist();
-                hasImportedMatchAll = attributeSettings.hasMatchAll();
-                importedMatchAll = attributeSettings.matchAll();
-                array = root.getAsJsonArray(FilterUiUtils.ATTRIBUTES_FIELD);
             } else if (parsed.isJsonArray()) {
-                array = parsed.getAsJsonArray();
+                JsonArray array = parsed.getAsJsonArray();
+                importedName = null;
+                hasImportedBlacklist = false;
+                importedBlacklist = false;
+                hasImportedMatchAll = false;
+                importedMatchAll = false;
+                imported = new ArrayList<>();
+                Set<String> dedupe = new HashSet<>();
+                invalid = 0;
+                duplicates = 0;
+                for (JsonElement element : array) {
+                    if (!element.isJsonObject()) { invalid++; continue; }
+                    JsonObject entry = element.getAsJsonObject();
+                    JsonElement payload = null;
+                    if (entry.has("nbt") && entry.get("nbt").isJsonPrimitive()) payload = entry.get("nbt");
+                    else if (entry.has("attribute") && entry.get("attribute").isJsonObject()) payload = entry.get("attribute");
+                    if (payload == null) { invalid++; continue; }
+                    boolean inverted = entry.has("inverted") && entry.get("inverted").getAsBoolean();
+                    try {
+                        CompoundTag tag = payload.isJsonPrimitive()
+                                ? TagParser.parseTag(payload.getAsString())
+                                : FilterPayloadUtils.expandFlattenedAttributeCompound(FilterPayloadUtils.jsonToCompoundTag(payload));
+                        ItemAttribute attribute = ItemAttribute.fromNBT(tag);
+                        if (attribute == null) { invalid++; continue; }
+                        String dedupeKey = (inverted ? "1:" : "0:") + tag;
+                        if (!dedupe.add(dedupeKey)) { duplicates++; continue; }
+                        imported.add(Pair.of(attribute, inverted));
+                    } catch (Exception ignored) { invalid++; }
+                }
             } else {
                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
                 return;
@@ -375,56 +384,6 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         } catch (Exception ignored) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid").withStyle(ChatFormatting.RED));
             return;
-        }
-
-        List<Pair<ItemAttribute, Boolean>> imported = new ArrayList<>();
-        Set<String> dedupe = new HashSet<>();
-        int invalid = 0;
-        int duplicates = 0;
-        for (JsonElement element : array) {
-            if (!element.isJsonObject()) {
-                invalid++;
-                continue;
-            }
-
-            JsonObject entry = element.getAsJsonObject();
-            JsonElement payload = null;
-            if (entry.has("nbt") && entry.get("nbt").isJsonPrimitive()) {
-                payload = entry.get("nbt");
-            } else if (entry.has("attribute") && entry.get("attribute").isJsonObject()) {
-                payload = entry.get("attribute");
-            }
-
-            if (payload == null) {
-                invalid++;
-                continue;
-            }
-
-            boolean inverted = entry.has("inverted") && entry.get("inverted").getAsBoolean();
-            try {
-                CompoundTag tag;
-                if (payload.isJsonPrimitive()) {
-                    tag = TagParser.parseTag(payload.getAsString());
-                } else {
-                    tag = FilterPayloadUtils.jsonToCompoundTag(payload);
-                    // Expand flattened attribute JSON { key: value } into nested CompoundTag
-                    // { key: { key: value } } expected by ItemAttribute.fromNBT
-                    tag = FilterPayloadUtils.expandFlattenedAttributeCompound(tag);
-                }
-                ItemAttribute attribute = ItemAttribute.fromNBT(tag);
-                if (attribute == null) {
-                    invalid++;
-                    continue;
-                }
-                String dedupeKey = (inverted ? "1:" : "0:") + tag;
-                if (!dedupe.add(dedupeKey)) {
-                    duplicates++;
-                    continue;
-                }
-                imported.add(Pair.of(attribute, inverted));
-            } catch (Exception ignored) {
-                invalid++;
-            }
         }
 
         if (imported.isEmpty()) {
@@ -442,7 +401,6 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             this.selectedAttributes.remove(vault_Filters$delTooltipLine);
             this.vault_Filters$selectedAttrIndex = 0;
             this.vault_Filters$deletionProgressTick = 0;
-
         }
 
         if (importedName != null) {

@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.simibubi.create.AllItems;
 import com.simibubi.create.AllPackets;
 import com.simibubi.create.content.logistics.filter.AbstractFilterMenu;
 import com.simibubi.create.content.logistics.filter.FilterItem;
@@ -33,10 +32,8 @@ import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
@@ -44,8 +41,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.ItemStackHandler;
 
 import java.util.ArrayList;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -184,20 +179,18 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             boolean shift = FilterUiUtils.isShiftDownSafe();
             boolean ctrl = FilterUiUtils.isControlDownSafe();
             boolean alt = FilterUiUtils.isAltDownSafe();
-            boolean simplifiedFormat = !shift && !ctrl && !alt;  // DEFAULT: No modifier
-            boolean prettyV2 = shift && !ctrl && !alt;           // Shift
-            boolean minifiedV2 = shift && ctrl && !alt;          // Shift+Ctrl
-            boolean legacyRaw = alt;                             // Alt
+            boolean simplifiedFormat = !shift && !ctrl && !alt;
+            boolean prettyV2 = shift && !ctrl && !alt;
+            boolean minifiedV2 = shift && ctrl && !alt;
+            boolean legacyRaw = alt;
             boolean prettyJson = prettyV2 || (!minifiedV2 && !legacyRaw);
 
             List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
 
             JsonArray items = new JsonArray();
             for (FilterItemStack filter : filters) {
-                JsonObject item = vault_Filters$serializeFilterItem(filter, legacyRaw, simplifiedFormat);
-                if (item != null) {
-                    items.add(item);
-                }
+                JsonObject item = FilterPayloadUtils.buildListFilterItem(filter, legacyRaw, simplifiedFormat);
+                if (item != null) items.add(item);
             }
 
             String format = simplifiedFormat ? FilterUiUtils.LIST_FORMAT_SIMPLIFIED :
@@ -226,102 +219,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         } catch (Exception e) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.export.invalid").withStyle(ChatFormatting.RED));
         }
-    }
-
-    @Unique
-    private JsonObject vault_Filters$serializeFilterItemSimplified(FilterItemStack filter) {
-        JsonObject obj = new JsonObject();
-
-        String customName = vault_Filters$getCustomFilterName(filter);
-        if (customName != null) {
-            obj.addProperty("name", customName);
-        }
-
-        if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
-            obj.addProperty("type", "attribute_filter");
-            obj.addProperty("isBlacklist", vault_Filters$isAttributeFilterBlacklist(attrFilter.item()));
-            obj.addProperty("matchAll", vault_Filters$isAttributeFilterMatchAll(attrFilter.item()));
-            obj.add("attributes", vault_Filters$serializeMatchedAttributes(attrFilter.item()));
-        } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
-            obj.addProperty("type", "list_filter");
-            obj.addProperty("isBlacklist", listFilter.isBlacklist);
-            obj.addProperty("shouldRespectNBT", listFilter.shouldRespectNBT);
-            if (listFilter.item().hasTag()) {
-                obj.addProperty("matchAll", listFilter.item().getTag().getBoolean("MatchAll"));
-            }
-            JsonArray nestedItems = new JsonArray();
-            for (FilterItemStack item : listFilter.containedItems) {
-                JsonObject nested = vault_Filters$serializeFilterItemSimplified(item);
-                if (nested != null) nestedItems.add(nested);
-            }
-            obj.add("items", nestedItems);
-        } else if (!filter.isEmpty()) {
-            obj.addProperty("type", "item_filter");
-            obj.add("stack", FilterPayloadUtils.tagToJson(filter.serializeNBT()));
-        } else {
-            return null;
-        }
-
-        return obj;
-    }
-
-    @Unique
-    private JsonObject vault_Filters$serializeFilterItem(FilterItemStack filter, boolean legacyRaw, boolean simplifiedFormat) {
-        if (simplifiedFormat) {
-            return vault_Filters$serializeFilterItemSimplified(filter);
-        }
-
-        JsonObject obj = new JsonObject();
-
-        String customName = legacyRaw ? null : vault_Filters$getCustomFilterName(filter);
-        if (customName != null) {
-            obj.addProperty("name", customName);
-        }
-
-        if (filter instanceof FilterItemStack.AttributeFilterItemStack attrFilter) {
-            CompoundTag serializedTag = filter.serializeNBT();
-            if (serializedTag != null) {
-                String serialized = serializedTag.toString();
-                obj.addProperty("nbt", serialized);
-            }
-            obj.addProperty("type", "attribute_filter");
-            obj.addProperty("inverted", false);
-        } else if (filter instanceof FilterItemStack.ListFilterItemStack listFilter) {
-            CompoundTag serializedTag = filter.serializeNBT();
-            if (serializedTag != null) {
-                if (legacyRaw) {
-                    String serialized = serializedTag.toString();
-                    obj.addProperty("nbt", serialized);
-                } else {
-                    CompoundTag compactListTag = vault_Filters$stripListItemsFromSerializedFilter(serializedTag);
-                    String serialized = compactListTag.toString();
-                    obj.addProperty("nbt", serialized);
-                }
-            }
-            obj.addProperty("type", "list_filter");
-            JsonArray nestedItems = new JsonArray();
-            for (FilterItemStack item : listFilter.containedItems) {
-                JsonObject nested = vault_Filters$serializeFilterItem(item, legacyRaw, simplifiedFormat);
-                if (nested != null) nestedItems.add(nested);
-            }
-            obj.add("items", nestedItems);
-            obj.addProperty("isBlacklist", listFilter.isBlacklist);
-            obj.addProperty("shouldRespectNBT", listFilter.shouldRespectNBT);
-            if (listFilter.item().hasTag()) {
-                obj.addProperty("matchAll", listFilter.item().getTag().getBoolean("MatchAll"));
-            }
-        } else if (!filter.isEmpty()) {
-            CompoundTag serializedTag = filter.serializeNBT();
-            if (serializedTag != null) {
-                String serialized = serializedTag.toString();
-                obj.addProperty("nbt", serialized);
-            }
-            obj.addProperty("type", "item_filter");
-        } else {
-            return null;
-        }
-
-        return obj;
     }
 
     @Unique
@@ -363,7 +260,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     .append("- ")
                     .append(title)
                     .append(" (")
-                    .append(vault_Filters$getModeLabel(listFilter.isBlacklist, listFilter.item().hasTag() && listFilter.item().getTag().getBoolean("MatchAll")))
+                    .append(FilterPayloadUtils.getModeLabel(listFilter.isBlacklist, listFilter.item().hasTag() && listFilter.item().getTag().getBoolean("MatchAll")))
                     .append(listFilter.shouldRespectNBT ? ", Respect NBT" : "")
                     .append(")\n");
 
@@ -379,7 +276,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     .append("- ")
                     .append(title)
                     .append(" (")
-                    .append(vault_Filters$getAttributeModeLabel(attrFilter.item()))
+                    .append(getAttributeModeLabel(attrFilter.item()))
                     .append(")\n");
             vault_Filters$appendAttributeDetails(out, filter.item(), depth + 1);
             return;
@@ -436,6 +333,15 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
     }
 
     @Unique
+    private String getAttributeModeLabel(ItemStack item) {
+        var mode = FilterPayloadUtils.whitelistModeFromItem(item);
+        return FilterPayloadUtils.getModeLabel(
+            mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST,
+            mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ
+        );
+    }
+
+    @Unique
     private String vault_Filters$getNodeTitle(FilterItemStack filter, String fallback) {
         ItemStack item = filter.item();
         if (item != null && !item.isEmpty() && item.hasCustomHoverName()) {
@@ -445,63 +351,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             }
         }
         return fallback;
-    }
-
-    @Unique
-    private String vault_Filters$getModeLabel(boolean isBlacklist, boolean matchAll) {
-        if (isBlacklist) {
-            return matchAll ? "Deny All" : "Deny Any";
-        }
-        return matchAll ? "Allow All" : "Allow Any";
-    }
-
-    @Unique
-    private String vault_Filters$getAttributeModeLabel(ItemStack item) {
-        if (item == null || item.isEmpty() || !item.hasTag()) {
-            return vault_Filters$getModeLabel(false, false);
-        }
-
-        CompoundTag tag = item.getTag();
-        if (tag == null || !tag.contains("WhitelistMode", Tag.TAG_INT)) {
-            return vault_Filters$getModeLabel(false, false);
-        }
-
-        int ordinal = tag.getInt("WhitelistMode");
-        FilterItemStack.AttributeFilterItemStack.WhitelistMode[] values = FilterItemStack.AttributeFilterItemStack.WhitelistMode.values();
-        if (ordinal < 0 || ordinal >= values.length) {
-            return vault_Filters$getModeLabel(false, false);
-        }
-
-        FilterItemStack.AttributeFilterItemStack.WhitelistMode mode = values[ordinal];
-        return mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST
-                ? vault_Filters$getModeLabel(true, false)
-            : mode == FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ
-                ? vault_Filters$getModeLabel(false, true)
-                : vault_Filters$getModeLabel(false, false);
-    }
-
-    @Unique
-    private boolean vault_Filters$isAttributeFilterBlacklist(ItemStack item) {
-        if (item == null || item.isEmpty() || !item.hasTag()) {
-            return false;
-        }
-
-        CompoundTag tag = item.getTag();
-        return tag != null
-                && tag.contains("WhitelistMode", Tag.TAG_INT)
-                && tag.getInt("WhitelistMode") == FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST.ordinal();
-    }
-
-    @Unique
-    private boolean vault_Filters$isAttributeFilterMatchAll(ItemStack item) {
-        if (item == null || item.isEmpty() || !item.hasTag()) {
-            return false;
-        }
-
-        CompoundTag tag = item.getTag();
-        return tag != null
-                && tag.contains("WhitelistMode", Tag.TAG_INT)
-                && tag.getInt("WhitelistMode") == FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ.ordinal();
     }
 
     @Unique
@@ -572,10 +421,14 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     invalid++;
                     continue;
                 }
-                CompoundTag tag = vault_Filters$buildFilterTagFromJson(elem.getAsJsonObject());
-                if (tag != null) {
-                    importTags.add(tag);
-                } else {
+                try {
+                    CompoundTag tag = FilterPayloadUtils.buildFilterTagFromJson(elem.getAsJsonObject());
+                    if (tag != null) {
+                        importTags.add(tag);
+                    } else {
+                        invalid++;
+                    }
+                } catch (Exception e) {
                     invalid++;
                 }
             }
@@ -643,267 +496,6 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         } catch (Exception ignored) {
             FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid").withStyle(ChatFormatting.RED));
         }
-    }
-
-    @Unique
-    private CompoundTag vault_Filters$buildFilterTagFromJson(JsonObject obj) throws Exception {
-        if (!obj.has("type") || !obj.get("type").isJsonPrimitive()) return null;
-        String type = obj.get("type").getAsString();
-        String name = vault_Filters$getJsonString(obj, "name");
-        if ("attribute_filter".equals(type)) {
-            return vault_Filters$buildAttributeFilterTagFromJson(obj, name);
-        }
-
-        if ("item_filter".equals(type)) {
-            String nbtString = vault_Filters$getNbtString(obj);
-            JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
-            CompoundTag parsed;
-            if (stackPayload != null) {
-                parsed = stackPayload.isJsonPrimitive()
-                        ? TagParser.parseTag(stackPayload.getAsString())
-                        : FilterPayloadUtils.jsonToCompoundTag(stackPayload);
-            } else if (nbtString != null) {
-                parsed = TagParser.parseTag(nbtString);
-            } else {
-                return null;
-            }
-            return vault_Filters$applyNameToSerializedStack(parsed, name);
-        }
-
-        if (!"list_filter".equals(type)) {
-            return null;
-        }
-
-        return vault_Filters$buildListFilterTagFromJson(obj, name);
-    }
-
-    @Unique
-    private CompoundTag vault_Filters$stripListItemsFromSerializedFilter(CompoundTag serializedTag) {
-        CompoundTag compact = serializedTag.copy();
-        if (compact.contains("tag", Tag.TAG_COMPOUND)) {
-            CompoundTag itemTag = compact.getCompound("tag");
-            itemTag.remove("Items");
-            if (itemTag.isEmpty()) {
-                compact.remove("tag");
-            }
-        }
-        return compact;
-    }
-
-    @Unique
-    private String vault_Filters$getCustomFilterName(FilterItemStack filter) {
-        ItemStack item = filter.item();
-        if (item == null || item.isEmpty() || !item.hasCustomHoverName()) {
-            return null;
-        }
-        String name = item.getHoverName().getString();
-        return name == null || name.isBlank() ? null : name;
-    }
-
-    @Unique
-    private String vault_Filters$getJsonString(JsonObject obj, String key) {
-        if (!obj.has(key) || !obj.get(key).isJsonPrimitive()) {
-            return null;
-        }
-        String value = obj.get(key).getAsString();
-        return value == null || value.isBlank() ? null : value;
-    }
-
-    @Unique
-    private CompoundTag vault_Filters$applyNameToSerializedStack(CompoundTag serializedStack, String name) {
-        if (serializedStack == null || name == null || name.isBlank()) {
-            return serializedStack;
-        }
-
-        ItemStack stack = ItemStack.of(serializedStack);
-        if (stack.isEmpty()) {
-            return serializedStack;
-        }
-
-        stack.setHoverName(new TextComponent(name));
-        return stack.serializeNBT();
-    }
-
-    @Unique
-    private String vault_Filters$getNbtString(JsonObject obj) {
-        if (obj.has("nbt") && obj.get("nbt").isJsonPrimitive()) {
-            String value = obj.get("nbt").getAsString();
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    @Unique
-    private JsonArray vault_Filters$serializeMatchedAttributes(ItemStack itemStack) {
-        JsonArray attributes = new JsonArray();
-        if (itemStack == null || itemStack.isEmpty() || !itemStack.hasTag()) {
-            return attributes;
-        }
-
-        CompoundTag tag = itemStack.getTag();
-        if (tag == null || !tag.contains("MatchedAttributes", Tag.TAG_LIST)) {
-            return attributes;
-        }
-
-        ListTag matchedAttributes = tag.getList("MatchedAttributes", Tag.TAG_COMPOUND);
-        for (int index = 0; index < matchedAttributes.size(); index++) {
-            Tag entryTag = matchedAttributes.get(index);
-            if (!(entryTag instanceof CompoundTag entry)) {
-                continue;
-            }
-
-            JsonObject attributeEntry = new JsonObject();
-            boolean inverted = entry.contains("Inverted", Tag.TAG_BYTE) && entry.getBoolean("Inverted");
-            attributeEntry.addProperty("inverted", inverted);
-
-            CompoundTag structuredEntry = entry.copy();
-            structuredEntry.remove("Inverted");
-            attributeEntry.add("attribute", FilterPayloadUtils.attributeTagToJson(structuredEntry));
-            attributes.add(attributeEntry);
-        }
-
-        return attributes;
-    }
-
-    @Unique
-    private CompoundTag vault_Filters$buildAttributeFilterTagFromJson(JsonObject obj, String name) throws Exception {
-        // Legacy v1/v2 list exports serialize attribute_filter entries as full stack NBT.
-        // If present, restore directly to preserve all original attribute data.
-        String nbtString = vault_Filters$getNbtString(obj);
-        if (nbtString != null) {
-            CompoundTag parsed = TagParser.parseTag(nbtString);
-            return vault_Filters$applyNameToSerializedStack(parsed, name);
-        }
-
-        JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
-        if (stackPayload != null) {
-            CompoundTag parsed = stackPayload.isJsonPrimitive()
-                    ? TagParser.parseTag(stackPayload.getAsString())
-                    : FilterPayloadUtils.jsonToCompoundTag(stackPayload);
-            return vault_Filters$applyNameToSerializedStack(parsed, name);
-        }
-
-        ItemStack attributeStack = AllItems.ATTRIBUTE_FILTER.asStack();
-        CompoundTag tag = attributeStack.getOrCreateTag();
-
-        boolean hasBlacklist = obj.has("isBlacklist") && obj.get("isBlacklist").isJsonPrimitive();
-        boolean hasMatchAll = obj.has("matchAll") && obj.get("matchAll").isJsonPrimitive();
-        boolean blacklist = hasBlacklist && obj.get("isBlacklist").getAsBoolean();
-        boolean matchAll = hasMatchAll && obj.get("matchAll").getAsBoolean();
-        FilterItemStack.AttributeFilterItemStack.WhitelistMode mode = blacklist
-                ? FilterItemStack.AttributeFilterItemStack.WhitelistMode.BLACKLIST
-                : (matchAll ? FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_CONJ
-                : FilterItemStack.AttributeFilterItemStack.WhitelistMode.WHITELIST_DISJ);
-        tag.putInt("WhitelistMode", mode.ordinal());
-
-        ListTag matchedAttributes = new ListTag();
-        JsonArray attributes = obj.has("attributes") && obj.get("attributes").isJsonArray() ? obj.getAsJsonArray("attributes") : new JsonArray();
-        for (JsonElement attributeElement : attributes) {
-            if (!attributeElement.isJsonObject()) {
-                continue;
-            }
-
-            JsonObject attributeObj = attributeElement.getAsJsonObject();
-            boolean inverted = attributeObj.has("inverted") && attributeObj.get("inverted").getAsBoolean();
-            JsonElement payload = attributeObj.has("attribute") ? attributeObj.get("attribute") : null;
-            if (payload == null && attributeObj.has("nbt") && attributeObj.get("nbt").isJsonPrimitive()) {
-                payload = attributeObj.get("nbt");
-            }
-            if (payload == null) {
-                continue;
-            }
-
-            CompoundTag entryTag = payload.isJsonPrimitive()
-                    ? TagParser.parseTag(payload.getAsString())
-                    : FilterPayloadUtils.jsonToCompoundTag(payload);
-            if (entryTag.isEmpty()) {
-                continue;
-            }
-
-            // Normalize flattened attribute objects into the nested CompoundTag format
-            // Create expects for MatchedAttributes.
-            if (!payload.isJsonPrimitive()) {
-                entryTag = FilterPayloadUtils.expandFlattenedAttributeCompound(entryTag);
-            }
-
-            entryTag.putBoolean("Inverted", inverted);
-            matchedAttributes.add(entryTag);
-        }
-
-        if (!matchedAttributes.isEmpty()) {
-            tag.put("MatchedAttributes", matchedAttributes);
-        }
-
-        if (name != null && !name.isBlank()) {
-            attributeStack.setHoverName(new TextComponent(name));
-        }
-
-        return attributeStack.serializeNBT();
-    }
-
-    @Unique
-    private CompoundTag vault_Filters$buildListFilterTagFromJson(JsonObject obj, String name) throws Exception {
-        JsonElement stackPayload = obj.has("stack") ? obj.get("stack") : null;
-        String nbtString = vault_Filters$getNbtString(obj);
-
-        ItemStack listStack;
-        if (stackPayload != null) {
-            listStack = stackPayload.isJsonPrimitive()
-                    ? ItemStack.of(TagParser.parseTag(stackPayload.getAsString()))
-                    : ItemStack.of(FilterPayloadUtils.jsonToCompoundTag(stackPayload));
-        } else if (nbtString != null) {
-            listStack = ItemStack.of(TagParser.parseTag(nbtString));
-        } else {
-            listStack = AllItems.FILTER.asStack();
-        }
-
-        if (listStack.isEmpty()) {
-            listStack = AllItems.FILTER.asStack();
-        }
-
-        CompoundTag listTag = listStack.getOrCreateTag();
-        if (obj.has("isBlacklist") && obj.get("isBlacklist").isJsonPrimitive()) {
-            listTag.putBoolean("Blacklist", obj.get("isBlacklist").getAsBoolean());
-        }
-        if (obj.has("shouldRespectNBT") && obj.get("shouldRespectNBT").isJsonPrimitive()) {
-            listTag.putBoolean("RespectNBT", obj.get("shouldRespectNBT").getAsBoolean());
-        }
-        if (obj.has("matchAll") && obj.get("matchAll").isJsonPrimitive()) {
-            listTag.putBoolean("MatchAll", obj.get("matchAll").getAsBoolean());
-        }
-
-        if (obj.has("items") && obj.get("items").isJsonArray()) {
-            ItemStackHandler handler = FilterItem.getFilterItems(listStack);
-            JsonArray nested = obj.getAsJsonArray("items");
-            int slot = 0;
-            for (JsonElement nestedElement : nested) {
-                if (!nestedElement.isJsonObject()) {
-                    continue;
-                }
-
-                CompoundTag childTag = vault_Filters$buildFilterTagFromJson(nestedElement.getAsJsonObject());
-                if (childTag == null) {
-                    continue;
-                }
-
-                if (slot >= handler.getSlots()) {
-                    break;
-                }
-
-                handler.setStackInSlot(slot++, ItemStack.of(childTag));
-            }
-
-            listTag.put("Items", handler.serializeNBT());
-        }
-
-        if (name != null && !name.isBlank()) {
-            listStack.setHoverName(new TextComponent(name));
-        }
-
-        return listStack.serializeNBT();
     }
 
     @Unique
