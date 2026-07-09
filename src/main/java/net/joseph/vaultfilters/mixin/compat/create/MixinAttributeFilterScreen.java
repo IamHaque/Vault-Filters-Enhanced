@@ -23,6 +23,9 @@ import com.simibubi.create.foundation.utility.Pair;
 import net.joseph.vaultfilters.attributes.abstracts.VaultAttribute;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
+import net.joseph.vaultfilters.library.FilterLibraryStore;
+import net.joseph.vaultfilters.library.SavedFilter;
+import net.joseph.vaultfilters.library.SavedFilterType;
 import net.joseph.vaultfilters.util.FilterPayloadUtils;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.ChatFormatting;
@@ -61,6 +64,12 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
     private Button vault_Filters$importButton;
     @Unique
     private Button vault_Filters$exportTreeButton;
+    @Unique
+    private Button vault_Filters$saveLibraryButton;
+    @Unique
+    private Button vault_Filters$openLibraryButton;
+    @Unique
+    private java.util.UUID vault_Filters$loadedLibraryId;
     @Unique
     private Button vault_Filters$exportAvailableButton;
 
@@ -170,6 +179,18 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
         addRenderableWidget(vault_Filters$exportAvailableButton);
+
+        // Library buttons (second row)
+        int libraryY = y - 22;
+        vault_Filters$saveLibraryButton = new Button(x + 46, libraryY, 42, 18,
+                new TranslatableComponent("vaultfilters.gui.library.save"),
+                button -> vault_Filters$saveToLibrary());
+        vault_Filters$openLibraryButton = new Button(x + 92, libraryY, 42, 18,
+                new TranslatableComponent("vaultfilters.gui.library.open"),
+                button -> vault_Filters$openLibrary());
+
+        addRenderableWidget(vault_Filters$saveLibraryButton);
+        addRenderableWidget(vault_Filters$openLibraryButton);
     }
     @Inject(method = "handleAddedAttibute", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z"))
     private void rmDelTooltipLine(boolean inverted, CallbackInfoReturnable<Boolean> cir) {
@@ -543,6 +564,53 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                         : mode == WhitelistMode.WHITELIST_CONJ ? FilterScreenPacket.Option.WHITELIST2
                         : FilterScreenPacket.Option.WHITELIST,
                 new CompoundTag()));
+    }
+
+    @Unique
+    private void vault_Filters$saveToLibrary() {
+        try {
+            List<Pair<ItemAttribute, Boolean>> attrs = new ArrayList<>(((AttributeFilterMenuAccessor) this.menu).getSelectedAttributes());
+            JsonArray attributes = FilterPayloadUtils.buildAttributeEntries(attrs, true);
+
+            JsonObject payload = FilterPayloadUtils.buildAttributeExportRoot(
+                    FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
+                    vault_Filters$isAttributeFilterBlacklist(),
+                    vault_Filters$isAttributeFilterMatchAll(),
+                    attributes,
+                    FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED
+            );
+
+            if (vault_Filters$loadedLibraryId != null) {
+                SavedFilter existing = FilterLibraryStore.get(vault_Filters$loadedLibraryId);
+                if (existing != null) {
+                    existing.withPayload(payload).touch();
+                    FilterLibraryStore.upsert(existing);
+                    FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", existing.name()).withStyle(ChatFormatting.GREEN));
+                    return;
+                }
+            }
+
+            String name = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
+            if (name == null || name.isBlank()) name = "Attribute Filter";
+            if (name.length() > 35) name = name.substring(0, 35);
+
+            if (!FilterLibraryStore.canAddMore()) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.full").withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            SavedFilter saved = SavedFilter.createNew(SavedFilterType.ATTRIBUTE_FILTER, name, payload);
+            FilterLibraryStore.upsert(saved);
+            vault_Filters$loadedLibraryId = saved.id();
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", name).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.save_failed").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$openLibrary() {
+        net.minecraft.client.Minecraft.getInstance().setScreen(new net.joseph.vaultfilters.client.gui.FilterLibraryScreen());
     }
 
 }

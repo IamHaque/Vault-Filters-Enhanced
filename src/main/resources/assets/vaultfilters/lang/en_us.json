@@ -417,5 +417,11 @@
   "vaultfilters.gui.library.delete.confirm": "Confirm?",
 
   "vaultfilters.gui.library.rename.confirm": "OK",
-  "vaultfilters.gui.library.rename.cancel": "X"
+  "vaultfilters.gui.library.rename.cancel": "X",
+
+  "vaultfilters.gui.library.save": "Save",
+  "vaultfilters.gui.library.open": "Library",
+  "vaultfilters.gui.library.saved": "Saved as \"%1$s\"",
+  "vaultfilters.gui.library.full": "Library is full",
+  "vaultfilters.gui.library.save_failed": "Failed to save to library"
 }

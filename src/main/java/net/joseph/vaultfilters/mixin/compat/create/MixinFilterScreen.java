@@ -22,6 +22,9 @@ import com.simibubi.create.foundation.utility.Lang;
 import net.joseph.vaultfilters.access.FilterMenuAdvancedAccessor;
 import net.joseph.vaultfilters.network.MenuFeaturesPacket;
 import net.joseph.vaultfilters.network.VFMessages;
+import net.joseph.vaultfilters.library.FilterLibraryStore;
+import net.joseph.vaultfilters.library.SavedFilter;
+import net.joseph.vaultfilters.library.SavedFilterType;
 import net.joseph.vaultfilters.util.FilterPayloadUtils;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.ChatFormatting;
@@ -89,6 +92,12 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
     private Button vault_Filters$importButton;
     @Unique
     private Button vault_Filters$exportTreeButton;
+    @Unique
+    private Button vault_Filters$saveLibraryButton;
+    @Unique
+    private Button vault_Filters$openLibraryButton;
+    @Unique
+    private java.util.UUID vault_Filters$loadedLibraryId;
 
     // This constructor is required by Mixin
     protected MixinFilterScreen(FilterMenu menu, Inventory inv, Component title, AllGuiTextures background) {
@@ -135,6 +144,18 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
         addRenderableWidget(vault_Filters$exportButton);
         addRenderableWidget(vault_Filters$importButton);
         addRenderableWidget(vault_Filters$exportTreeButton);
+
+        // Library buttons (second row)
+        int libraryY = by - 22;
+        vault_Filters$saveLibraryButton = new Button(bx - 46, libraryY, 42, 18,
+                new TranslatableComponent("vaultfilters.gui.library.save"),
+                button -> vault_Filters$saveToLibrary());
+        vault_Filters$openLibraryButton = new Button(bx, libraryY, 42, 18,
+                new TranslatableComponent("vaultfilters.gui.library.open"),
+                button -> vault_Filters$openLibrary());
+
+        addRenderableWidget(vault_Filters$saveLibraryButton);
+        addRenderableWidget(vault_Filters$openLibraryButton);
     }
 
     @Inject(method = "getTooltipButtons", at = @At("HEAD"), cancellable = true)
@@ -528,6 +549,58 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
             }
         }
         return filters;
+    }
+
+    @Unique
+    private void vault_Filters$saveToLibrary() {
+        try {
+            List<FilterItemStack> filters = vault_Filters$getCurrentFilters();
+            JsonArray items = new JsonArray();
+            for (FilterItemStack filter : filters) {
+                JsonObject item = FilterPayloadUtils.buildListFilterItem(filter, false, true);
+                if (item != null) items.add(item);
+            }
+
+            JsonObject payload = FilterPayloadUtils.buildListExportRoot(
+                    FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu),
+                    menuAccessor.vault_filters$isBlacklist(),
+                    menuAccessor.vault_filters$shouldRespectNBT(),
+                    menuAccessor.vault_filters$getMatchAll(),
+                    items,
+                    FilterUiUtils.LIST_FORMAT_SIMPLIFIED
+            );
+
+            if (vault_Filters$loadedLibraryId != null) {
+                SavedFilter existing = FilterLibraryStore.get(vault_Filters$loadedLibraryId);
+                if (existing != null) {
+                    existing.withPayload(payload).touch();
+                    FilterLibraryStore.upsert(existing);
+                    FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", existing.name()).withStyle(ChatFormatting.GREEN));
+                    return;
+                }
+            }
+
+            String name = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
+            if (name == null || name.isBlank()) name = "List Filter";
+            if (name.length() > 35) name = name.substring(0, 35);
+
+            if (!FilterLibraryStore.canAddMore()) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.full").withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            SavedFilter saved = SavedFilter.createNew(SavedFilterType.LIST_FILTER, name, payload);
+            FilterLibraryStore.upsert(saved);
+            vault_Filters$loadedLibraryId = saved.id();
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", name).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.save_failed").withStyle(ChatFormatting.RED));
+        }
+    }
+
+    @Unique
+    private void vault_Filters$openLibrary() {
+        net.minecraft.client.Minecraft.getInstance().setScreen(new net.joseph.vaultfilters.client.gui.FilterLibraryScreen());
     }
 
 }
