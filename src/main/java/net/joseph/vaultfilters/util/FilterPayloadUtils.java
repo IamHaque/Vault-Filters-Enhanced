@@ -230,14 +230,145 @@ public final class FilterPayloadUtils {
     }
 
     /**
+     * Convert a numeric tag to a JSON string representation that preserves type information.
+     * Uses NBT-style suffixes: f for float, d for double, l for long, etc.
+     * Examples: "0.07f", "1.2d", "100l"
+     */
+    public static JsonPrimitive numericTagToJsonString(Tag tag) {
+        if (tag instanceof FloatTag floatTag) {
+            return new JsonPrimitive(floatTag.getAsFloat() + "f");
+        }
+        if (tag instanceof DoubleTag doubleTag) {
+            return new JsonPrimitive(doubleTag.getAsDouble() + "d");
+        }
+        if (tag instanceof LongTag longTag) {
+            return new JsonPrimitive(longTag.getAsLong() + "l");
+        }
+        if (tag instanceof IntTag intTag) {
+            return new JsonPrimitive(intTag.getAsInt());
+        }
+        if (tag instanceof ShortTag shortTag) {
+            return new JsonPrimitive(shortTag.getAsShort());
+        }
+        if (tag instanceof ByteTag byteTag) {
+            return new JsonPrimitive(byteTag.getAsByte());
+        }
+        return null;
+    }
+
+    /**
+     * Parse a numeric JSON string with type suffix back into the appropriate NBT tag.
+     * Handles formats like "0.07f", "1.2d", "100l", etc.
+     * Returns null if the string doesn't match a recognized numeric type pattern.
+     */
+    public static Tag parseNumericJsonString(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+
+        char lastChar = value.charAt(value.length() - 1);
+        String numPart = value.substring(0, value.length() - 1);
+
+        try {
+            switch (lastChar) {
+                case 'f', 'F' -> {
+                    return FloatTag.valueOf(Float.parseFloat(numPart));
+                }
+                case 'd', 'D' -> {
+                    return DoubleTag.valueOf(Double.parseDouble(numPart));
+                }
+                case 'l', 'L' -> {
+                    return LongTag.valueOf(Long.parseLong(numPart));
+                }
+                default -> {
+                    return null;
+                }
+            }
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Recursively convert an NBT tag to JSON with type-preserving numeric values.
+     * All numeric values use NBT-style suffixes (f, d, l) to preserve type information
+     * during simplified format export/import round-trips.
+     */
+    private static JsonElement tagToJsonWithTypes(Tag tag) {
+        if (tag == null) {
+            return JsonNull.INSTANCE;
+        }
+
+        if (tag instanceof CompoundTag compoundTag) {
+            JsonObject object = new JsonObject();
+            for (String key : compoundTag.getAllKeys()) {
+                object.add(key, tagToJsonWithTypes(compoundTag.get(key)));
+            }
+            return object;
+        }
+
+        if (tag instanceof ListTag listTag) {
+            JsonArray array = new JsonArray();
+            for (int index = 0; index < listTag.size(); index++) {
+                array.add(tagToJsonWithTypes(listTag.get(index)));
+            }
+            return array;
+        }
+
+        if (tag instanceof ByteArrayTag byteArrayTag) {
+            JsonArray array = new JsonArray();
+            for (byte value : byteArrayTag.getAsByteArray()) {
+                array.add(value);
+            }
+            return array;
+        }
+
+        if (tag instanceof IntArrayTag intArrayTag) {
+            JsonArray array = new JsonArray();
+            for (int value : intArrayTag.getAsIntArray()) {
+                array.add(value);
+            }
+            return array;
+        }
+
+        if (tag instanceof LongArrayTag longArrayTag) {
+            JsonArray array = new JsonArray();
+            for (long value : longArrayTag.getAsLongArray()) {
+                array.add(value);
+            }
+            return array;
+        }
+
+        // For numeric types, use type-preserving string representation
+        JsonPrimitive numeric = numericTagToJsonString(tag);
+        if (numeric != null) {
+            return numeric;
+        }
+
+        if (tag instanceof StringTag stringTag) {
+            return new JsonPrimitive(stringTag.getAsString());
+        }
+
+        if (tag instanceof ByteTag byteTag) {
+            return new JsonPrimitive(byteTag.getAsByte() != 0);
+        }
+
+        return new JsonPrimitive(tag.getAsString());
+    }
+
+    /**
      * Normalize attribute JSON emitted from attribute tags to avoid duplicated
      * nested keys like { "card_color": { "card_color": "GREEN" } }.
      *
      * If the element is an object with a single key K whose value is an object
      * with a single key also named K, this collapses it to { K: innerValue }.
+     *
+     * For numeric values, preserves type information using NBT-style suffixes
+     * (e.g., "0.07f" for FloatTag, "1.2d" for DoubleTag).
      */
     public static JsonElement attributeTagToJson(Tag tag) {
-        JsonElement elem = tagToJson(tag);
+        // Use type-preserving conversion
+        JsonElement elem = tagToJsonWithTypes(tag);
         if (!elem.isJsonObject()) return elem;
 
         JsonObject obj = elem.getAsJsonObject();
@@ -284,10 +415,24 @@ public final class FilterPayloadUtils {
             return ByteTag.valueOf((byte) (primitive.getAsBoolean() ? 1 : 0));
         }
 
+        String rawString = primitive.getAsString();
+
+        // Try to parse type-suffixed numeric strings (from simplified format export)
+        // Examples: "0.07f", "1.2d", "100l"
+        if (rawString.length() > 1) {
+            char lastChar = rawString.charAt(rawString.length() - 1);
+            if (lastChar == 'f' || lastChar == 'F' || lastChar == 'd' || lastChar == 'D' ||
+                lastChar == 'l' || lastChar == 'L') {
+                Tag parsedNumeric = parseNumericJsonString(rawString);
+                if (parsedNumeric != null) {
+                    return parsedNumeric;
+                }
+            }
+        }
+
         if (primitive.isNumber()) {
             Number number = primitive.getAsNumber();
-            String raw = primitive.getAsString();
-            if (raw.contains(".") || raw.contains("e") || raw.contains("E")) {
+            if (rawString.contains(".") || rawString.contains("e") || rawString.contains("E")) {
                 return DoubleTag.valueOf(number.doubleValue());
             }
 
@@ -298,7 +443,7 @@ public final class FilterPayloadUtils {
             return LongTag.valueOf(longValue);
         }
 
-        return StringTag.valueOf(primitive.getAsString());
+        return StringTag.valueOf(rawString);
     }
 
     public static CompoundTag jsonToCompoundTag(JsonElement element) {

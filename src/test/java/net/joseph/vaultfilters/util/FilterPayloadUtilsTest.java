@@ -1,14 +1,19 @@
 package net.joseph.vaultfilters.util;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.FloatTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.LongTag;
 import net.minecraft.nbt.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FilterPayloadUtilsTest {
@@ -222,5 +227,62 @@ class FilterPayloadUtilsTest {
 
         // We don't call Create's parser here (may require game env); verifying
         // the expanded CompoundTag shape matches the legacy nested form is sufficient.
+    }
+
+    @Test
+    void simplifiedNumericTypePreservationRoundTrip() {
+        // Test that float/double types are preserved during simplified format export/import
+        // Create a simple attribute tag with numeric value
+        CompoundTag cardColorAttr = new CompoundTag();
+        CompoundTag inner = new CompoundTag();
+        inner.putFloat("card_color", 0.07f);
+        cardColorAttr.put("card_color", inner);
+
+        // Export to simplified JSON - should preserve float type with "f" suffix
+        JsonElement json = FilterPayloadUtils.attributeTagToJson(cardColorAttr);
+        JsonObject obj = json.getAsJsonObject();
+
+        System.out.println("DEBUG: Generated JSON = " + FilterUiUtils.PRETTY_GSON.toJson(json));
+
+        // After flattening, should collapse from {K: {K: V}} to {K: V}
+        assertTrue(obj.has("card_color"));
+        JsonElement cardColorValue = obj.get("card_color");
+        assertTrue(cardColorValue.isJsonPrimitive(), "card_color should be primitive, got: " + cardColorValue.getClass().getSimpleName());
+        String value = cardColorValue.getAsString();
+        System.out.println("DEBUG: card_color value = '" + value + "'");
+        assertTrue(value.endsWith("f"), "Float should have 'f' suffix, got: " + value);
+
+        // Re-import and verify type is preserved
+        CompoundTag reimported = FilterPayloadUtils.jsonToCompoundTag(json);
+        // After flattening, the structure is {card_color: "0.07f"}, which re-imports to
+        // CompoundTag with key "card_color" -> FloatTag(0.07f)
+        Tag levelTag = reimported.get("card_color");
+        assertTrue(levelTag instanceof FloatTag, "Should be FloatTag, got: " + levelTag.getClass().getSimpleName());
+        assertEquals(0.07f, ((FloatTag) levelTag).getAsFloat(), 0.0001f);
+    }
+
+    @Test
+    void numericJsonStringConversion() {
+        // Test parsing of type-suffixed numeric strings
+
+        // Test float parsing
+        Tag floatTag = FilterPayloadUtils.parseNumericJsonString("0.07f");
+        assertTrue(floatTag instanceof FloatTag);
+        assertEquals(0.07f, ((FloatTag) floatTag).getAsFloat(), 0.0001f);
+
+        // Test double parsing
+        Tag doubleTag = FilterPayloadUtils.parseNumericJsonString("1.2d");
+        assertTrue(doubleTag instanceof DoubleTag);
+        assertEquals(1.2d, ((DoubleTag) doubleTag).getAsDouble(), 0.0001d);
+
+        // Test long parsing
+        Tag longTag = FilterPayloadUtils.parseNumericJsonString("100l");
+        assertTrue(longTag instanceof LongTag);
+        assertEquals(100L, ((LongTag) longTag).getAsLong());
+
+        // Test invalid formats return null
+        assertNull(FilterPayloadUtils.parseNumericJsonString("123x"));
+        assertNull(FilterPayloadUtils.parseNumericJsonString("notanumber"));
+        assertNull(FilterPayloadUtils.parseNumericJsonString(""));
     }
 }
