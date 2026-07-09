@@ -413,5 +413,9 @@
   "vaultfilters.gui.library.duplicate": "Dup",
   "vaultfilters.gui.library.export": "Exp",
   "vaultfilters.gui.library.tree": "Tree",
-  "vaultfilters.gui.library.delete": "Del"
+  "vaultfilters.gui.library.delete": "Del",
+  "vaultfilters.gui.library.delete.confirm": "Confirm?",
+
+  "vaultfilters.gui.library.rename.confirm": "OK",
+  "vaultfilters.gui.library.rename.cancel": "X"
 }
