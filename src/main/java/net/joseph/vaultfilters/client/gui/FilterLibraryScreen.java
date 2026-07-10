@@ -20,6 +20,9 @@ import net.minecraft.network.chat.TranslatableComponent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+
+import javax.annotation.Nullable;
 
 public class FilterLibraryScreen extends Screen {
     private static final int GUI_WIDTH = 256;
@@ -39,6 +42,8 @@ public class FilterLibraryScreen extends Screen {
     private Button exportButton;
     private Button treeButton;
     private Button deleteButton;
+    private Button applyReplaceButton;
+    private Button applyMergeButton;
 
     private List<SavedFilter> filters = new ArrayList<>();
     private boolean deleteConfirming;
@@ -52,14 +57,42 @@ public class FilterLibraryScreen extends Screen {
     private String statusMessage;
     private long statusMessageUntil;
 
+    @Nullable
+    private final Screen parentScreen;
+    @Nullable
+    private final SavedFilterType contextType;
+    @Nullable
+    private final BiConsumer<JsonObject, Boolean> onApply;
+
     public FilterLibraryScreen() {
+        this(null, null, null);
+    }
+
+    public FilterLibraryScreen(@Nullable Screen parentScreen, @Nullable SavedFilterType contextType,
+                                @Nullable BiConsumer<JsonObject, Boolean> onApply) {
         super(new TranslatableComponent("vaultfilters.screen.filter_library"));
+        this.parentScreen = parentScreen;
+        this.contextType = contextType;
+        this.onApply = onApply;
+    }
+
+    @Override
+    public void onClose() {
+        if (parentScreen != null) {
+            Minecraft.getInstance().setScreen(parentScreen);
+        } else {
+            super.onClose();
+        }
     }
 
     @Override
     protected void init() {
         super.init();
-        filters = FilterLibraryStore.list();
+        if (contextType != null) {
+            filters = FilterLibraryStore.listByType(contextType);
+        } else {
+            filters = FilterLibraryStore.list();
+        }
 
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
@@ -75,23 +108,51 @@ public class FilterLibraryScreen extends Screen {
         int btnW = 36;
         int btnH = 16;
         int gap = 2;
-        int totalW = 6 * btnW + 5 * gap;
+        boolean hasApply = onApply != null && contextType != null;
+        int btnCount = hasApply ? 8 : 6;
+        int totalW = btnCount * btnW + (btnCount - 1) * gap;
         int startX = x + (GUI_WIDTH - totalW) / 2;
 
-        importButton = addRenderableWidget(new Button(startX, btnY, btnW, btnH,
+        int idx = 0;
+        if (hasApply) {
+            applyReplaceButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
+                    new TranslatableComponent("vaultfilters.gui.library.apply_replace"), b -> onApplyFilter(false)));
+            idx++;
+            applyMergeButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
+                    new TranslatableComponent("vaultfilters.gui.library.apply_merge"), b -> onApplyFilter(true)));
+            idx++;
+        }
+
+        importButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.import"), b -> onImport()));
-        renameButton = addRenderableWidget(new Button(startX + (btnW + gap), btnY, btnW, btnH,
+        idx++;
+        renameButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.rename"), b -> onRename()));
-        duplicateButton = addRenderableWidget(new Button(startX + 2 * (btnW + gap), btnY, btnW, btnH,
+        idx++;
+        duplicateButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.duplicate"), b -> onDuplicate()));
-        exportButton = addRenderableWidget(new Button(startX + 3 * (btnW + gap), btnY, btnW, btnH,
+        idx++;
+        exportButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.export"), b -> onExport()));
-        treeButton = addRenderableWidget(new Button(startX + 4 * (btnW + gap), btnY, btnW, btnH,
+        idx++;
+        treeButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.tree"), b -> onTree()));
-        deleteButton = addRenderableWidget(new Button(startX + 5 * (btnW + gap), btnY, btnW, btnH,
+        idx++;
+        deleteButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.delete"), b -> onDelete()));
 
         updateButtonStates();
+    }
+
+    private void onApplyFilter(boolean merge) {
+        SavedFilter sel = selectedFilter();
+        if (sel == null || onApply == null || contextType == null) return;
+        if (sel.type() != contextType) {
+            setStatus("Cannot apply: filter type mismatch");
+            return;
+        }
+        onApply.accept(sel.payload(), merge);
+        onClose();
     }
 
     @Override
@@ -116,6 +177,12 @@ public class FilterLibraryScreen extends Screen {
         SavedFilter sel = selectedFilter();
         boolean selected = sel != null;
         boolean renamingActive = renaming;
+        if (applyReplaceButton != null) {
+            applyReplaceButton.active = selected && !renamingActive && sel != null && contextType != null && sel.type() == contextType;
+        }
+        if (applyMergeButton != null) {
+            applyMergeButton.active = selected && !renamingActive && sel != null && contextType != null && sel.type() == contextType;
+        }
         importButton.active = !renamingActive;
         renameButton.active = selected && !renamingActive;
         duplicateButton.active = selected && !renamingActive;
@@ -350,6 +417,8 @@ public class FilterLibraryScreen extends Screen {
         renameCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
                 new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelRename()));
 
+        if (applyReplaceButton != null) applyReplaceButton.active = false;
+        if (applyMergeButton != null) applyMergeButton.active = false;
         importButton.active = false;
         renameButton.active = false;
         duplicateButton.active = false;

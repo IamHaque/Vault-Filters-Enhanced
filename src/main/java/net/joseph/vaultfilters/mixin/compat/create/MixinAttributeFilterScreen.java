@@ -610,7 +610,51 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
 
     @Unique
     private void vault_Filters$openLibrary() {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new net.joseph.vaultfilters.client.gui.FilterLibraryScreen());
+        net.minecraft.client.Minecraft.getInstance().setScreen(
+                new net.joseph.vaultfilters.client.gui.FilterLibraryScreen(
+                        (net.minecraft.client.gui.screens.Screen) this,
+                        SavedFilterType.ATTRIBUTE_FILTER,
+                        this::vault_Filters$applyLibraryPayload
+                )
+        );
+    }
+
+    @Unique
+    private void vault_Filters$applyLibraryPayload(JsonObject payload, boolean merge) {
+        FilterPayloadUtils.AttributeImportResult result = FilterPayloadUtils.parseAttributeImport(payload);
+        if (result.attributes().isEmpty() && result.invalid() == 0 && result.duplicates() == 0) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.attribute_filter.import.invalid")
+                    .withStyle(net.minecraft.ChatFormatting.RED));
+            return;
+        }
+
+        if (!merge) {
+            this.menu.clearContents();
+            this.contentsCleared();
+            this.menu.sendClearPacket();
+            this.selectedAttributes.clear();
+            this.selectedAttributes.add(this.selectedT.plainCopy().withStyle(net.minecraft.ChatFormatting.GRAY));
+            this.selectedAttributes.remove(vault_Filters$delTooltipLine);
+            this.vault_Filters$selectedAttrIndex = 0;
+            this.vault_Filters$deletionProgressTick = 0;
+        }
+
+        if (result.name() != null) {
+            FilterUiUtils.applyImportedFilterName((AbstractFilterMenu) this.menu, result.name());
+        }
+
+        if (result.hasBlacklist() || result.hasMatchAll()) {
+            vault_Filters$setAttributeFilterMode(result.blacklist(), result.matchAll());
+        }
+
+        for (Pair<ItemAttribute, Boolean> pair : result.attributes()) {
+            this.vault_Filters$addAttr(pair.getFirst(), pair.getSecond());
+        }
+
+        FilterUiUtils.notifyUser(new TranslatableComponent(
+                merge ? "vaultfilters.gui.attribute_filter.imported.merge" : "vaultfilters.gui.attribute_filter.imported.replace",
+                result.attributes().size(), result.invalid(), result.duplicates()
+        ).withStyle(net.minecraft.ChatFormatting.GREEN));
     }
 
 }

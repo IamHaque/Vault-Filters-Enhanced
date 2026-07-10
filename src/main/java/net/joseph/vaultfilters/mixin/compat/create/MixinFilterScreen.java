@@ -600,7 +600,120 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
 
     @Unique
     private void vault_Filters$openLibrary() {
-        net.minecraft.client.Minecraft.getInstance().setScreen(new net.joseph.vaultfilters.client.gui.FilterLibraryScreen());
+        net.minecraft.client.Minecraft.getInstance().setScreen(
+                new net.joseph.vaultfilters.client.gui.FilterLibraryScreen(
+                        (net.minecraft.client.gui.screens.Screen) this,
+                        SavedFilterType.LIST_FILTER,
+                        this::vault_Filters$applyLibraryPayload
+                )
+        );
+    }
+
+    @Unique
+    private void vault_Filters$applyLibraryPayload(JsonObject payload, boolean merge) {
+        try {
+            if (!payload.has("filter") || !payload.get("filter").isJsonObject()) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid")
+                        .withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            JsonObject filterObj = payload.getAsJsonObject("filter");
+            if (!filterObj.has("items") || !filterObj.get("items").isJsonArray()) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid")
+                        .withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            FilterPayloadUtils.ListSettings listSettings = FilterPayloadUtils.readListSettings(filterObj);
+            JsonArray items = filterObj.getAsJsonArray("items");
+
+            if (!FilterPayloadUtils.validateNestedListImport(items)) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid")
+                        .withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            net.minecraftforge.items.ItemStackHandler handler = FilterItem.getFilterItems(
+                    ((AbstractFilterMenu) this.menu).contentHolder);
+            int slotCount = handler.getSlots();
+
+            java.util.List<net.minecraft.nbt.CompoundTag> importTags = new ArrayList<>();
+            int invalid = 0;
+            for (JsonElement elem : items) {
+                if (!elem.isJsonObject()) { invalid++; continue; }
+                try {
+                    net.minecraft.nbt.CompoundTag tag = FilterPayloadUtils.buildFilterTagFromJson(elem.getAsJsonObject());
+                    if (tag != null) {
+                        importTags.add(tag);
+                    } else {
+                        invalid++;
+                    }
+                } catch (Exception e) {
+                    invalid++;
+                }
+            }
+
+            if (importTags.isEmpty()) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.none")
+                        .withStyle(ChatFormatting.RED));
+                return;
+            }
+
+            if (listSettings.hasBlacklist()) {
+                menuAccessor.vault_filters$setBlacklist(listSettings.blacklist());
+                AllPackets.getChannel().sendToServer(new FilterScreenPacket(
+                        listSettings.blacklist() ? FilterScreenPacket.Option.BLACKLIST : FilterScreenPacket.Option.WHITELIST,
+                        new net.minecraft.nbt.CompoundTag()));
+            }
+            if (listSettings.hasRespectNBT()) {
+                menuAccessor.vault_filters$setRespectNBT(listSettings.respectNBT());
+                AllPackets.getChannel().sendToServer(new FilterScreenPacket(
+                        listSettings.respectNBT() ? FilterScreenPacket.Option.RESPECT_DATA : FilterScreenPacket.Option.IGNORE_DATA,
+                        new net.minecraft.nbt.CompoundTag()));
+            }
+            if (listSettings.hasMatchAll()) {
+                menuAccessor.vault_filters$setMatchAll(listSettings.matchAll());
+                VFMessages.VFCHANNEL.sendToServer(new MenuFeaturesPacket(
+                        listSettings.matchAll() ? MenuFeaturesPacket.MenuAction.MATCH_ALL : MenuFeaturesPacket.MenuAction.MATCH_ANY));
+            }
+
+            if (!merge) {
+                this.menu.clearContents();
+                net.minecraft.nbt.CompoundTag emptyTag = net.minecraft.world.item.ItemStack.EMPTY.serializeNBT();
+                for (int slot = 0; slot < slotCount; slot++) {
+                    vault_Filters$sendFilterSlotUpdate(slot, emptyTag);
+                    handler.setStackInSlot(slot, net.minecraft.world.item.ItemStack.EMPTY);
+                }
+            }
+
+            String importedName = payload.has("name") && payload.get("name").isJsonPrimitive()
+                    ? payload.get("name").getAsString() : null;
+            if (importedName != null) {
+                FilterUiUtils.applyImportedFilterName((AbstractFilterMenu) this.menu, importedName);
+            }
+
+            int imported = 0;
+            int slotIndex = merge ? vault_Filters$findFirstEmptySlot(handler) : 0;
+            for (net.minecraft.nbt.CompoundTag itemTag : importTags) {
+                while (slotIndex < slotCount && !handler.getStackInSlot(slotIndex).isEmpty()) {
+                    slotIndex++;
+                }
+                if (slotIndex >= slotCount) break;
+                vault_Filters$sendFilterSlotUpdate(slotIndex, itemTag);
+                handler.setStackInSlot(slotIndex, net.minecraft.world.item.ItemStack.of(itemTag));
+                imported++;
+                slotIndex++;
+            }
+
+            FilterUiUtils.notifyUser(new TranslatableComponent(
+                    merge ? "vaultfilters.gui.list_filter.imported.merge" : "vaultfilters.gui.list_filter.imported.replace",
+                    imported, invalid
+            ).withStyle(ChatFormatting.GREEN));
+        } catch (Exception e) {
+            FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.list_filter.import.invalid")
+                    .withStyle(ChatFormatting.RED));
+        }
     }
 
 }
