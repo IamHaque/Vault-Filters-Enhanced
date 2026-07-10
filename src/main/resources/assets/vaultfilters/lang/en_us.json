@@ -423,5 +423,13 @@
   "vaultfilters.gui.library.open": "Library",
   "vaultfilters.gui.library.saved": "Saved as \"%1$s\"",
   "vaultfilters.gui.library.full": "Library is full",
-  "vaultfilters.gui.library.save_failed": "Failed to save to library"
+  "vaultfilters.gui.library.save_failed": "Failed to save to library",
+  "vaultfilters.gui.library.payload_too_large": "Filter payload is too large to save",
+  "vaultfilters.gui.library.search": "Search...",
+  "vaultfilters.gui.library.show_all": "All",
+  "vaultfilters.gui.library.hide_other": "Filtered",
+  "vaultfilters.gui.library.apply_replace": "Replace",
+  "vaultfilters.gui.library.apply_merge": "Merge",
+  "vaultfilters.gui.library.overwrite.title": "Overwrite?",
+  "vaultfilters.gui.library.overwrite.message": "A filter named \"%1$s\" already exists. Overwrite it?"
 }

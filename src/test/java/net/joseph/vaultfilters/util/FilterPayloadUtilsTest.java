@@ -262,6 +262,30 @@ class FilterPayloadUtilsTest {
     }
 
     @Test
+    void listExportRootIncludesTypeField() {
+        JsonObject root = FilterPayloadUtils.buildListExportRoot("Test", false, false, false, new JsonArray(), FilterUiUtils.LIST_FORMAT_V2);
+        assertEquals("list_filter", root.get("type").getAsString());
+    }
+
+    @Test
+    void listExportRootSimplifiedIncludesTypeField() {
+        JsonObject root = FilterPayloadUtils.buildListExportRootSimplified("Test", false, false, false, new JsonArray());
+        assertEquals("list_filter", root.get("type").getAsString());
+    }
+
+    @Test
+    void attributeExportRootIncludesTypeField() {
+        JsonObject root = FilterPayloadUtils.buildAttributeExportRoot("Test", false, false, new JsonArray(), FilterUiUtils.ATTRIBUTE_FORMAT_V2);
+        assertEquals("attribute_filter", root.get("type").getAsString());
+    }
+
+    @Test
+    void attributeExportRootSimplifiedIncludesTypeField() {
+        JsonObject root = FilterPayloadUtils.buildAttributeExportRootSimplified("Test", false, false, new JsonArray());
+        assertEquals("attribute_filter", root.get("type").getAsString());
+    }
+
+    @Test
     void numericJsonStringConversion() {
         // Test parsing of type-suffixed numeric strings
 
