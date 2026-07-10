@@ -45,6 +45,13 @@ public class FilterLibraryScreen extends Screen {
     private Button applyReplaceButton;
     private Button applyMergeButton;
 
+    private EditBox searchBox;
+    private Button sortButton;
+    private Button showAllButton;
+    private FilterLibraryStore.SortMode currentSort = FilterLibraryStore.SortMode.NAME_ASC;
+    private boolean showOtherType;
+
+    private List<SavedFilter> allFilters = new ArrayList<>();
     private List<SavedFilter> filters = new ArrayList<>();
     private boolean deleteConfirming;
     private UUID deleteTarget;
@@ -88,21 +95,43 @@ public class FilterLibraryScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        showOtherType = false;
+        currentSort = FilterLibraryStore.SortMode.NAME_ASC;
+
         if (contextType != null) {
-            filters = FilterLibraryStore.listByType(contextType);
+            allFilters = FilterLibraryStore.listByType(contextType);
         } else {
-            filters = FilterLibraryStore.list();
+            allFilters = FilterLibraryStore.list();
         }
+        applySearchAndSort();
 
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
 
         listLeft = x + 10;
-        listTop = y + 20;
+        listTop = y + 36;
         listRight = x + GUI_WIDTH - 10;
         listBottom = y + GUI_HEIGHT - 40;
         scrollOffset = 0;
         selectedId = null;
+
+        searchBox = new EditBox(font, x + 10, y + 20, 140, 12, new TextComponent(""));
+        searchBox.setMaxLength(50);
+        searchBox.setBordered(false);
+        searchBox.setTextColor(0xFFFFFF);
+        searchBox.setResponder(s -> {
+            applySearchAndSort();
+            scrollOffset = 0;
+        });
+        addRenderableWidget(searchBox);
+
+        sortButton = addRenderableWidget(new Button(x + 155, y + 19, 39, 14,
+                new TextComponent(sortLabel()), b -> cycleSort()));
+
+        if (contextType != null) {
+            showAllButton = addRenderableWidget(new Button(x + 198, y + 19, 48, 14,
+                    new TranslatableComponent("vaultfilters.gui.library.show_all"), b -> toggleShowAll()));
+        }
 
         int btnY = y + GUI_HEIGHT - 30;
         int btnW = 36;
@@ -142,6 +171,52 @@ public class FilterLibraryScreen extends Screen {
                 new TranslatableComponent("vaultfilters.gui.library.delete"), b -> onDelete()));
 
         updateButtonStates();
+    }
+
+    private void applySearchAndSort() {
+        List<SavedFilter> base = allFilters;
+        String query = searchBox != null ? searchBox.getValue().toLowerCase() : "";
+        if (!query.isEmpty()) {
+            base = new ArrayList<>();
+            for (SavedFilter sf : allFilters) {
+                if (sf.name().toLowerCase().contains(query)) {
+                    base.add(sf);
+                }
+            }
+        }
+        currentSort.sort(base);
+        filters = base;
+    }
+
+    private String sortLabel() {
+        return switch (currentSort) {
+            case NAME_ASC -> "A-Z";
+            case NEWEST_FIRST -> "New";
+            case OLDEST_FIRST -> "Old";
+        };
+    }
+
+    private void cycleSort() {
+        FilterLibraryStore.SortMode[] values = FilterLibraryStore.SortMode.values();
+        currentSort = values[(currentSort.ordinal() + 1) % values.length];
+        sortButton.setMessage(new TextComponent(sortLabel()));
+        applySearchAndSort();
+        scrollOffset = 0;
+    }
+
+    private void toggleShowAll() {
+        showOtherType = !showOtherType;
+        if (showOtherType) {
+            allFilters = FilterLibraryStore.list();
+        } else if (contextType != null) {
+            allFilters = FilterLibraryStore.listByType(contextType);
+        }
+        if (showAllButton != null) {
+            showAllButton.setMessage(new TranslatableComponent(
+                    showOtherType ? "vaultfilters.gui.library.hide_other" : "vaultfilters.gui.library.show_all"));
+        }
+        applySearchAndSort();
+        scrollOffset = 0;
     }
 
     private void onApplyFilter(boolean merge) {
@@ -209,6 +284,11 @@ public class FilterLibraryScreen extends Screen {
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
 
+        if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
+            font.draw(ms, new TranslatableComponent("vaultfilters.gui.library.search"),
+                    searchBox.x + 2, searchBox.y + 1, 0x606060);
+        }
+
         if (statusMessage != null && System.currentTimeMillis() < statusMessageUntil) {
             drawCenteredString(ms, font, new TextComponent(statusMessage),
                     width / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT + 8, 0xFFFF55);
@@ -221,9 +301,12 @@ public class FilterLibraryScreen extends Screen {
             renameBox.render(ms, mouseX, mouseY, partialTicks);
         }
 
-        if (filters.isEmpty() && !renaming) {
+        if (allFilters.isEmpty() && !renaming) {
             drawCenteredString(ms, font,
                     new TranslatableComponent("vaultfilters.screen.filter_library.empty"),
+                    width / 2, listTop + 20, 0x808080);
+        } else if (filters.isEmpty() && !renaming) {
+            drawCenteredString(ms, font, new TextComponent("No matches"),
                     width / 2, listTop + 20, 0x808080);
         }
     }
@@ -300,7 +383,9 @@ public class FilterLibraryScreen extends Screen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        updateButtonStates();
+        return handled;
     }
 
     @Override
@@ -319,6 +404,15 @@ public class FilterLibraryScreen extends Screen {
             }
             return renameBox != null && renameBox.isFocused() || super.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (searchBox != null && searchBox.isFocused()) {
+            if (keyCode == 256) {
+                searchBox.changeFocus(false);
+                return true;
+            }
+            if (searchBox.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
         if (keyCode == 256) {
             onClose();
             return true;
@@ -330,6 +424,9 @@ public class FilterLibraryScreen extends Screen {
     public boolean charTyped(char codePoint, int modifiers) {
         if (renaming && renameBox != null && renameBox.isFocused()) {
             return renameBox.charTyped(codePoint, modifiers);
+        }
+        if (searchBox != null && searchBox.isFocused()) {
+            return searchBox.charTyped(codePoint, modifiers);
         }
         return super.charTyped(codePoint, modifiers);
     }
@@ -522,7 +619,12 @@ public class FilterLibraryScreen extends Screen {
     }
 
     void refreshList() {
-        filters = FilterLibraryStore.list();
+        if (showOtherType || contextType == null) {
+            allFilters = FilterLibraryStore.list();
+        } else {
+            allFilters = FilterLibraryStore.listByType(contextType);
+        }
+        applySearchAndSort();
         int panelHeight = listBottom - listTop;
         int visibleCount = panelHeight / ROW_HEIGHT;
         int maxOffset = Math.max(0, filters.size() - visibleCount);
