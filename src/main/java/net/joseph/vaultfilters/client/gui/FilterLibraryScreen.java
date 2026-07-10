@@ -25,7 +25,6 @@ import java.util.UUID;
 public class FilterLibraryScreen extends Screen {
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 220;
-    private static final int MAX_IMPORT_SIZE = 25000;
 
     private FilterList list;
     private Button importButton;
@@ -229,26 +228,33 @@ public class FilterLibraryScreen extends Screen {
             setStatus("Clipboard is empty");
             return;
         }
-        if (clipboard.length() > MAX_IMPORT_SIZE) {
-            setStatus("Clipboard payload too large (" + clipboard.length() + " chars)");
+        if (clipboard.length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+            setStatus("Clipboard payload too large (" + clipboard.length() + " chars, max " + FilterUiUtils.MAX_IMPORT_CHARS + ")");
             return;
         }
 
         try {
             JsonObject obj = JsonParser.parseString(clipboard).getAsJsonObject();
-            if (!obj.has("type") || !obj.get("type").isJsonPrimitive()) {
-                setStatus("Clipboard does not contain a valid filter payload");
-                return;
-            }
 
-            String type = obj.get("type").getAsString();
-            SavedFilterType savedType;
-            if ("attribute_filter".equals(type)) {
-                savedType = SavedFilterType.ATTRIBUTE_FILTER;
-            } else if ("list_filter".equals(type) || "item_filter".equals(type)) {
-                savedType = SavedFilterType.LIST_FILTER;
-            } else {
-                setStatus("Unknown filter type: " + type);
+            SavedFilterType savedType = null;
+            if (obj.has("type") && obj.get("type").isJsonPrimitive()) {
+                String type = obj.get("type").getAsString();
+                if ("attribute_filter".equals(type)) {
+                    savedType = SavedFilterType.ATTRIBUTE_FILTER;
+                } else if ("list_filter".equals(type) || "item_filter".equals(type)) {
+                    savedType = SavedFilterType.LIST_FILTER;
+                }
+            }
+            if (savedType == null && obj.has("format") && obj.get("format").isJsonPrimitive()) {
+                String format = obj.get("format").getAsString();
+                if (format.startsWith("vaultfilters.attribute_filter.")) {
+                    savedType = SavedFilterType.ATTRIBUTE_FILTER;
+                } else if (format.startsWith("vaultfilters.list_filter.")) {
+                    savedType = SavedFilterType.LIST_FILTER;
+                }
+            }
+            if (savedType == null) {
+                setStatus("Clipboard does not contain a valid filter payload");
                 return;
             }
 

@@ -48,9 +48,10 @@ public final class FilterPayloadUtils {
     }
 
     public static JsonObject buildListExportRoot(String name, boolean blacklist, boolean respectNBT, boolean matchAll,
-                                                 JsonArray items, String format) {
+                                                  JsonArray items, String format) {
         JsonObject root = new JsonObject();
         root.addProperty(FilterUiUtils.FORMAT_FIELD, format);
+        root.addProperty("type", "list_filter");
         if (name != null && !name.isBlank()) {
             root.addProperty("name", name);
         }
@@ -65,9 +66,10 @@ public final class FilterPayloadUtils {
     }
 
     public static JsonObject buildListExportRootSimplified(String name, boolean blacklist, boolean respectNBT,
-                                                           boolean matchAll, JsonArray items) {
+                                                            boolean matchAll, JsonArray items) {
         JsonObject root = new JsonObject();
         root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.LIST_FORMAT_SIMPLIFIED);
+        root.addProperty("type", "list_filter");
         if (name != null && !name.isBlank()) {
             root.addProperty("name", name);
         }
@@ -82,9 +84,10 @@ public final class FilterPayloadUtils {
     }
 
     public static JsonObject buildAttributeExportRoot(String name, boolean blacklist, boolean matchAll,
-                                                      JsonArray attributes, String format) {
+                                                       JsonArray attributes, String format) {
         JsonObject root = new JsonObject();
         root.addProperty(FilterUiUtils.FORMAT_FIELD, format);
+        root.addProperty("type", "attribute_filter");
         root.addProperty("isBlacklist", blacklist);
         root.addProperty("matchAll", matchAll);
         if (name != null && !name.isBlank()) {
@@ -95,9 +98,10 @@ public final class FilterPayloadUtils {
     }
 
     public static JsonObject buildAttributeExportRootSimplified(String name, boolean blacklist, boolean matchAll,
-                                                                JsonArray attributes) {
+                                                                 JsonArray attributes) {
         JsonObject root = new JsonObject();
         root.addProperty(FilterUiUtils.FORMAT_FIELD, FilterUiUtils.ATTRIBUTE_FORMAT_SIMPLIFIED);
+        root.addProperty("type", "attribute_filter");
         root.addProperty("isBlacklist", blacklist);
         root.addProperty("matchAll", matchAll);
         if (name != null && !name.isBlank()) {
