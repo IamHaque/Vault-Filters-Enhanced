@@ -884,7 +884,7 @@ public class FilterLibraryScreen extends Screen {
                     if (onStar) {
                         SavedFilter sf = filters.get(i);
                         sf.toggleFavorite();
-                        FilterLibraryStore.upsert(sf);
+                        FilterLibraryStore.toggleFavorite(sf.id());
                         setStatus(sf.favorite() ? "Favorited \"" + sf.name() + "\"" : "Unfavorited \"" + sf.name() + "\"");
                         return true;
                     }

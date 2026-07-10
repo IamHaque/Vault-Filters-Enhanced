@@ -84,4 +84,45 @@ public class SavedFilter {
         this.updatedAt = System.currentTimeMillis();
         return this;
     }
+
+    public JsonObject toIndexJson() {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("id", id.toString());
+        obj.addProperty("type", type.jsonId());
+        obj.addProperty("name", name);
+        obj.addProperty("createdAt", createdAt);
+        obj.addProperty("updatedAt", updatedAt);
+        obj.addProperty("favorite", favorite);
+        return obj;
+    }
+
+    public JsonObject toEntryJson() {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("type", type.jsonId());
+        obj.addProperty("name", name);
+        obj.addProperty("createdAt", createdAt);
+        obj.addProperty("updatedAt", updatedAt);
+        obj.addProperty("favorite", favorite);
+        if (payload != null) {
+            obj.add("payload", payload);
+        }
+        return obj;
+    }
+
+    public static SavedFilter fromEntryJson(JsonObject obj, UUID id) {
+        String typeStr = obj.get("type").getAsString();
+        SavedFilterType type = SavedFilterType.fromJsonId(typeStr);
+        if (type == null) throw new IllegalArgumentException("Unknown type: " + typeStr);
+
+        String name = obj.has("name") ? obj.get("name").getAsString() : "";
+        if (name.length() > 35) name = name.substring(0, 35);
+
+        long createdAt = obj.has("createdAt") ? obj.get("createdAt").getAsLong() : System.currentTimeMillis();
+        long updatedAt = obj.has("updatedAt") ? obj.get("updatedAt").getAsLong() : createdAt;
+        boolean favorite = obj.has("favorite") && obj.get("favorite").getAsBoolean();
+        JsonObject payload = obj.has("payload") && obj.get("payload").isJsonObject()
+                ? obj.getAsJsonObject("payload") : new JsonObject();
+
+        return new SavedFilter(id, type, name, createdAt, updatedAt, payload, favorite);
+    }
 }
