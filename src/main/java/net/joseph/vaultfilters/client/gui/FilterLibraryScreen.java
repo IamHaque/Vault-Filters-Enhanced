@@ -14,10 +14,13 @@ import net.joseph.vaultfilters.library.SavedFilterType;
 import net.joseph.vaultfilters.util.FilterPayloadUtils;
 import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.ChatFormatting;
+import net.joseph.vaultfilters.network.ShareC2SPacket;
+import net.joseph.vaultfilters.network.VFMessages;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
@@ -55,6 +58,7 @@ public class FilterLibraryScreen extends Screen {
     private Button exportButton;
     private Button treeButton;
     private Button deleteButton;
+    private Button shareButton;
     private Button applyReplaceButton;
     private Button applyMergeButton;
 
@@ -78,6 +82,18 @@ public class FilterLibraryScreen extends Screen {
     private SavedFilter renameTarget;
     private String statusMessage;
     private long statusMessageUntil;
+
+    private boolean sharing;
+    private EditBox shareBox;
+    private List<String> shareSuggestions = new ArrayList<>();
+    private int shareSelectedSuggestion = -1;
+    private Button shareConfirmButton;
+    private Button shareCancelButton;
+
+    private int closeX;
+    private int closeY;
+    private static final int CLOSE_W = 10;
+    private static final int CLOSE_H = 10;
 
     private static final int TOOLTIP_DELAY_TICKS = 20;
     private final Map<Button, String> tooltipMap = new IdentityHashMap<>();
@@ -165,7 +181,7 @@ public class FilterLibraryScreen extends Screen {
                     "vaultfilters.gui.library.tooltip.show_all"));
         }
 
-        int btnW = 36;
+        int btnW = 33;
         int btnH = 16;
         int gap = 2;
         int groupGap = 4;
@@ -179,7 +195,7 @@ public class FilterLibraryScreen extends Screen {
 
         int row1Y = hasApply ? listBottom + 8 : 0;
         int row2Y = hasApply ? row1Y + 20 : listBottom + 8;
-        int mgmtCount = 6;
+        int mgmtCount = 7;
         int mgmtTotalW = mgmtCount * btnW + (mgmtCount - 1) * gap + 2 * groupGap;
         int mgmtStartX = x + (GUI_WIDTH - mgmtTotalW) / 2;
 
@@ -212,6 +228,14 @@ public class FilterLibraryScreen extends Screen {
                 createTooltipButton(mgmtStartX + idx * (btnW + gap) + 2 * groupGap, row2Y, btnW, btnH,
                         new TranslatableComponent("vaultfilters.gui.library.delete"), b -> onDelete(),
                         "vaultfilters.gui.library.tooltip.delete"));
+        idx++;
+        shareButton = addRenderableWidget(
+                createTooltipButton(mgmtStartX + idx * (btnW + gap) + 2 * groupGap, row2Y, btnW, btnH,
+                        new TranslatableComponent("vaultfilters.gui.library.share"), b -> onShare(),
+                        "vaultfilters.gui.library.tooltip.share"));
+
+        closeX = x + GUI_WIDTH - 14;
+        closeY = y + 4;
 
         if (hasApply) {
             int applyBtnW = 110;
@@ -361,22 +385,23 @@ public class FilterLibraryScreen extends Screen {
     private void updateButtonStates() {
         SavedFilter sel = selectedFilter();
         boolean selected = sel != null;
-        boolean renamingActive = renaming;
-        favoritesButton.active = !renamingActive;
+        boolean modalActive = renaming || sharing;
+        favoritesButton.active = !modalActive;
         if (applyReplaceButton != null) {
-            applyReplaceButton.active = selected && !renamingActive && sel != null && contextType != null
+            applyReplaceButton.active = selected && !modalActive && sel != null && contextType != null
                     && sel.type() == contextType;
         }
         if (applyMergeButton != null) {
-            applyMergeButton.active = selected && !renamingActive && sel != null && contextType != null
+            applyMergeButton.active = selected && !modalActive && sel != null && contextType != null
                     && sel.type() == contextType;
         }
-        importButton.active = !renamingActive;
-        renameButton.active = selected && !renamingActive;
-        duplicateButton.active = selected && !renamingActive;
-        exportButton.active = selected && !renamingActive;
-        treeButton.active = selected && !renamingActive;
-        deleteButton.active = selected && !renamingActive;
+        importButton.active = !modalActive;
+        renameButton.active = selected && !modalActive;
+        duplicateButton.active = selected && !modalActive;
+        exportButton.active = selected && !modalActive;
+        treeButton.active = selected && !modalActive;
+        deleteButton.active = selected && !modalActive;
+        shareButton.active = selected && !modalActive;
         updateDeleteButton();
     }
 
@@ -425,10 +450,24 @@ public class FilterLibraryScreen extends Screen {
             fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xFF333333);
         }
 
+        if (sharing) {
+            fill(ms, 0, 0, width, height, 0xCC000000);
+            int sx = (width - 200) / 2;
+            int sy = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 36;
+            fill(ms, sx - 4, sy - 4, sx + 208, sy + 96, 0xFF333333);
+            drawCenteredString(ms, font, new TranslatableComponent("vaultfilters.gui.library.share.title"),
+                    width / 2, sy + 4, 0xFFFFFF);
+        }
+
         super.render(ms, mouseX, mouseY, partialTicks);
 
         if (renaming && renameBox != null) {
             renameBox.render(ms, mouseX, mouseY, partialTicks);
+        }
+
+        if (sharing && shareBox != null) {
+            shareBox.render(ms, mouseX, mouseY, partialTicks);
+            renderShareSuggestions(ms, mouseX, mouseY);
         }
 
         renderList(ms, mouseX, mouseY, partialTicks);
@@ -451,7 +490,7 @@ public class FilterLibraryScreen extends Screen {
 
         // Row hover delay: detect hovered row
         renderHoveredRowId = null;
-        if (!renaming) {
+        if (!renaming && !sharing) {
             int panelHeight = listBottom - listTop;
             int visibleCount = panelHeight / ROW_HEIGHT;
             int end = Math.min(scrollOffset + visibleCount, filters.size());
@@ -465,7 +504,7 @@ public class FilterLibraryScreen extends Screen {
                 }
             }
         }
-        if (renderHoveredRowId != null && rowHoverTicks >= TOOLTIP_DELAY_TICKS && !renaming) {
+        if (renderHoveredRowId != null && rowHoverTicks >= TOOLTIP_DELAY_TICKS && !renaming && !sharing) {
             if (!renderHoveredRowId.equals(cachedPreviewId)) {
                 for (SavedFilter f : filters) {
                     if (f.id().equals(renderHoveredRowId)) {
@@ -481,6 +520,9 @@ public class FilterLibraryScreen extends Screen {
         }
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 6, 0xFFFFFF);
+
+        boolean hoveringClose = mouseX >= closeX && mouseX <= closeX + CLOSE_W && mouseY >= closeY && mouseY <= closeY + CLOSE_H;
+        font.draw(ms, "\u00d7", closeX, closeY, hoveringClose ? 0xFF5555 : 0xAAAAAA);
 
         String showingLabel;
         String favPrefix = showFavoritesOnly ? "\u2605 " : "";
@@ -509,11 +551,11 @@ public class FilterLibraryScreen extends Screen {
                     width / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT + 8, 0xFFFF55);
         }
 
-        if (allFilters.isEmpty() && !renaming) {
+        if (allFilters.isEmpty() && !renaming && !sharing) {
             drawCenteredString(ms, font,
                     new TranslatableComponent("vaultfilters.screen.filter_library.empty"),
                     width / 2, listTop + 20, 0x808080);
-        } else if (filters.isEmpty() && !renaming) {
+        } else if (filters.isEmpty() && !renaming && !sharing) {
             drawCenteredString(ms, font, new TextComponent("No matches"),
                     width / 2, listTop + 20, 0x808080);
         }
@@ -872,6 +914,34 @@ public class FilterLibraryScreen extends Screen {
             }
             return super.mouseClicked(mouseX, mouseY, button);
         }
+        if (sharing) {
+            if (shareBox != null && shareBox.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+            if (shareSuggestions != null && !shareSuggestions.isEmpty()) {
+                int sx = shareBox.x;
+                int sy = shareBox.y + shareBox.getHeight() + 1;
+                int sw = shareBox.getWidth();
+                int maxShow = Math.min(shareSuggestions.size(), 6);
+                int sh = maxShow * 12;
+                if (mouseX >= sx && mouseX <= sx + sw && mouseY >= sy && mouseY <= sy + sh) {
+                    int idx = (int) ((mouseY - sy) / 12);
+                    if (idx >= 0 && idx < maxShow) {
+                        shareBox.setValue(shareSuggestions.get(idx));
+                        shareSuggestions.clear();
+                        shareSelectedSuggestion = -1;
+                    }
+                    return true;
+                }
+            }
+            return super.mouseClicked(mouseX, mouseY, button);
+        }
+
+        if (mouseX >= closeX && mouseX <= closeX + CLOSE_W && mouseY >= closeY && mouseY <= closeY + CLOSE_H) {
+            onClose();
+            return true;
+        }
+
         if (mouseX >= listLeft && mouseX <= listRight && mouseY >= listTop && mouseY <= listBottom) {
             int panelHeight = listBottom - listTop;
             int visibleCount = panelHeight / ROW_HEIGHT;
@@ -917,6 +987,21 @@ public class FilterLibraryScreen extends Screen {
             }
             return renameBox != null && renameBox.isFocused() || super.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (sharing) {
+            if (keyCode == 256) {
+                cancelShare();
+                return true;
+            }
+            if (keyCode == 257 || keyCode == 335) {
+                confirmShare();
+                return true;
+            }
+            if (shareBox != null && shareBox.keyPressed(keyCode, scanCode, modifiers)) {
+                updateShareSuggestions();
+                return true;
+            }
+            return shareBox != null && shareBox.isFocused() || super.keyPressed(keyCode, scanCode, modifiers);
+        }
         if (searchBox != null && searchBox.isFocused()) {
             if (keyCode == 256) {
                 searchBox.changeFocus(false);
@@ -937,6 +1022,11 @@ public class FilterLibraryScreen extends Screen {
     public boolean charTyped(char codePoint, int modifiers) {
         if (renaming && renameBox != null && renameBox.isFocused()) {
             return renameBox.charTyped(codePoint, modifiers);
+        }
+        if (sharing && shareBox != null && shareBox.isFocused()) {
+            boolean result = shareBox.charTyped(codePoint, modifiers);
+            updateShareSuggestions();
+            return result;
         }
         if (searchBox != null && searchBox.isFocused()) {
             return searchBox.charTyped(codePoint, modifiers);
@@ -1154,6 +1244,137 @@ public class FilterLibraryScreen extends Screen {
         deleteTarget = null;
         refreshList();
         setStatus("Deleted filter");
+    }
+
+    private void onShare() {
+        SavedFilter sel = selectedFilter();
+        if (sel == null) return;
+        beginShare(sel);
+    }
+
+    private void beginShare(SavedFilter filter) {
+        sharing = true;
+        shareSuggestions = new ArrayList<>();
+        shareSelectedSuggestion = -1;
+
+        shareBox = new EditBox(font, (width - 192) / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 16, 176, 14,
+                new TextComponent(""));
+        shareBox.setMaxLength(16);
+        shareBox.changeFocus(true);
+        setFocused(shareBox);
+
+        int y = shareBox.y + 56;
+        int cx = (width - 80) / 2;
+        shareConfirmButton = addRenderableWidget(new Button(cx, y, 38, 16,
+                new TranslatableComponent("vaultfilters.gui.library.share.confirm"), b -> confirmShare()));
+        shareCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
+                new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelShare()));
+
+        if (applyReplaceButton != null) applyReplaceButton.active = false;
+        if (applyMergeButton != null) applyMergeButton.active = false;
+        importButton.active = false;
+        renameButton.active = false;
+        duplicateButton.active = false;
+        exportButton.active = false;
+        treeButton.active = false;
+        deleteButton.active = false;
+        shareButton.active = false;
+        if (searchBox != null) searchBox.setEditable(false);
+        sortButton.active = false;
+        favoritesButton.active = false;
+        if (showAllButton != null) showAllButton.active = false;
+    }
+
+    private void confirmShare() {
+        if (shareBox == null) return;
+        String targetName = shareBox.getValue();
+        if (targetName == null || targetName.isBlank()) {
+            setStatus("Enter a player name");
+            return;
+        }
+
+        SavedFilter sel = selectedFilter();
+        if (sel == null) {
+            cleanupShare();
+            setStatus("No filter selected");
+            return;
+        }
+
+        String filterJson = FilterUiUtils.PRETTY_GSON.toJson(sel.toEntryJson());
+        VFMessages.VFCHANNEL.sendToServer(new ShareC2SPacket(targetName, filterJson));
+
+        cleanupShare();
+        setStatus("Sent \"" + sel.name() + "\" to " + targetName);
+    }
+
+    private void cancelShare() {
+        cleanupShare();
+        updateButtonStates();
+    }
+
+    private void cleanupShare() {
+        sharing = false;
+        shareSuggestions = null;
+        shareSelectedSuggestion = -1;
+        if (shareBox != null) {
+            removeWidget(shareBox);
+            shareBox = null;
+        }
+        if (shareConfirmButton != null) {
+            removeWidget(shareConfirmButton);
+            shareConfirmButton = null;
+        }
+        if (shareCancelButton != null) {
+            removeWidget(shareCancelButton);
+            shareCancelButton = null;
+        }
+        if (searchBox != null) searchBox.setEditable(true);
+        sortButton.active = true;
+        favoritesButton.active = true;
+        if (showAllButton != null) showAllButton.active = true;
+        setFocused(null);
+    }
+
+    private void updateShareSuggestions() {
+        shareSuggestions.clear();
+        if (shareBox == null) return;
+        String text = shareBox.getValue().toLowerCase();
+        if (text.isEmpty()) return;
+
+        for (PlayerInfo info : Minecraft.getInstance().player.connection.getOnlinePlayers()) {
+            String name = info.getProfile().getName();
+            if (!name.equalsIgnoreCase(Minecraft.getInstance().player.getGameProfile().getName())
+                    && name.toLowerCase().contains(text)) {
+                shareSuggestions.add(name);
+            }
+        }
+        shareSuggestions.sort(String.CASE_INSENSITIVE_ORDER);
+        shareSelectedSuggestion = shareSuggestions.size() == 1 ? 0 : -1;
+    }
+
+    private void renderShareSuggestions(PoseStack ms, int mouseX, int mouseY) {
+        if (shareSuggestions == null || shareSuggestions.isEmpty() || shareBox == null) return;
+
+        int sx = shareBox.x;
+        int sy = shareBox.y + shareBox.getHeight() + 1;
+        int sw = shareBox.getWidth();
+        int maxShow = Math.min(shareSuggestions.size(), 6);
+        int sh = maxShow * 12;
+
+        fill(ms, sx, sy, sx + sw, sy + sh, 0xFF1A1A1A);
+        fill(ms, sx, sy, sx + sw, sy + 1, 0xFF555555);
+        fill(ms, sx, sy + sh - 1, sx + sw, sy + sh, 0xFF555555);
+        fill(ms, sx, sy, sx + 1, sy + sh, 0xFF555555);
+        fill(ms, sx + sw - 1, sy, sx + sw, sy + sh, 0xFF555555);
+
+        for (int i = 0; i < maxShow; i++) {
+            String name = shareSuggestions.get(i);
+            int ry = sy + 2 + i * 12;
+            if (mouseX >= sx && mouseX <= sx + sw && mouseY >= ry - 1 && mouseY < ry + 11) {
+                fill(ms, sx + 1, ry - 1, sx + sw - 1, ry + 11, 0xFF444444);
+            }
+            font.draw(ms, name, sx + 3, ry, 0xFFFFFF);
+        }
     }
 
     void refreshList() {

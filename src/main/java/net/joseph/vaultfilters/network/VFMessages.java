@@ -23,9 +23,15 @@ public class VFMessages {
         VFCHANNEL.registerMessage(packetId++, MenuFeaturesPacket.class,
                 MenuFeaturesPacket::encode, MenuFeaturesPacket::decode, MenuFeaturesPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
-        VFCHANNEL.registerMessage(packetId++,NestedFilterPacket.class,
-                NestedFilterPacket::encode,NestedFilterPacket::decode,NestedFilterPacket::handle,
+        VFCHANNEL.registerMessage(packetId++, NestedFilterPacket.class,
+                NestedFilterPacket::encode, NestedFilterPacket::decode, NestedFilterPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        VFCHANNEL.registerMessage(packetId++, ShareC2SPacket.class,
+                ShareC2SPacket::encode, ShareC2SPacket::decode, ShareC2SPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        VFCHANNEL.registerMessage(packetId++, ShareS2CPacket.class,
+                ShareS2CPacket::encode, ShareS2CPacket::decode, ShareS2CPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
 }

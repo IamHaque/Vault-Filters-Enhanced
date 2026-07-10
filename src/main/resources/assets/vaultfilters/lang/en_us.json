@@ -415,6 +415,9 @@
   "vaultfilters.gui.library.tree": "Tree",
   "vaultfilters.gui.library.delete": "Del",
   "vaultfilters.gui.library.delete.confirm": "Confirm?",
+  "vaultfilters.gui.library.share": "Send",
+  "vaultfilters.gui.library.share.title": "Share Filter",
+  "vaultfilters.gui.library.share.confirm": "Send",
 
   "vaultfilters.gui.library.rename.confirm": "OK",
   "vaultfilters.gui.library.rename.cancel": "X",
@@ -443,5 +446,6 @@
   "vaultfilters.gui.library.tooltip.apply_merge": "Merge this filter into the open filter",
   "vaultfilters.gui.library.tooltip.sort": "Cycle sort order: Name \u2192 Newest \u2192 Oldest",
   "vaultfilters.gui.library.tooltip.show_all": "Toggle between showing only this filter type and showing all filters",
-  "vaultfilters.gui.library.tooltip.favorites": "Toggle showing only favorites"
+  "vaultfilters.gui.library.tooltip.favorites": "Toggle showing only favorites",
+  "vaultfilters.gui.library.tooltip.share": "Send this filter to another online player"
 }

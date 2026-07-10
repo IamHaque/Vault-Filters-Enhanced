@@ -16,6 +16,9 @@ public class VFServerConfig {
     public static final ForgeConfigSpec.ConfigValue<Boolean> LASERIO_COMPAT;
     public static final ForgeConfigSpec.ConfigValue<Boolean> CACHE_DATAFIX;
 
+    public static final ForgeConfigSpec.ConfigValue<Integer> MAX_SHARE_BYTES;
+    public static final ForgeConfigSpec.ConfigValue<Integer> MAX_SHARES_PER_MINUTE;
+
     static {
         BUILDER.push("Vault Filters Server Config");
 
@@ -42,6 +45,12 @@ public class VFServerConfig {
 
         CACHE_DATAFIX = BUILDER.comment("\nDelete old cache entries from items when they're filtered through" +
                 "\nDefault:false").define("Old cache data fixer", false);
+
+        MAX_SHARE_BYTES = BUILDER.comment("\nMaximum size of a shared filter payload in bytes" +
+                "\nDefault:51200").defineInRange("Max Share Bytes", 51200, 1024, 51200);
+        MAX_SHARES_PER_MINUTE = BUILDER.comment("\nMaximum number of filters a player can share per minute" +
+                "\nDefault:5").defineInRange("Max Shares Per Minute", 5, 1, 60);
+
         BUILDER.pop();
         SPEC = BUILDER.build();
     }
