@@ -61,8 +61,10 @@ public class FilterLibraryScreen extends Screen {
     private EditBox searchBox;
     private Button sortButton;
     private Button showAllButton;
+    private Button favoritesButton;
     private FilterLibraryStore.SortMode currentSort = FilterLibraryStore.SortMode.NAME_ASC;
     private boolean showOtherType;
+    private boolean showFavoritesOnly;
 
     private List<SavedFilter> allFilters = new ArrayList<>();
     private List<SavedFilter> filters = new ArrayList<>();
@@ -120,6 +122,7 @@ public class FilterLibraryScreen extends Screen {
     protected void init() {
         super.init();
         showOtherType = false;
+        showFavoritesOnly = false;
         currentSort = FilterLibraryStore.SortMode.NAME_ASC;
 
         if (contextType != null) {
@@ -133,13 +136,12 @@ public class FilterLibraryScreen extends Screen {
         int y = (height - GUI_HEIGHT) / 2;
 
         listLeft = x + 10;
-        listTop = y + 52;
+        listTop = y + 48;
         listRight = x + GUI_WIDTH - 10;
-        listBottom = y + GUI_HEIGHT - 58;
         scrollOffset = 0;
         selectedId = null;
 
-        searchBox = new EditBox(font, x + 10, y + 20, 140, 12, new TextComponent(""));
+        searchBox = new EditBox(font, x + 10, y + 18, 130, 12, new TextComponent(""));
         searchBox.setMaxLength(50);
         searchBox.setBordered(false);
         searchBox.setTextColor(0xFFFFFF);
@@ -149,12 +151,16 @@ public class FilterLibraryScreen extends Screen {
         });
         addRenderableWidget(searchBox);
 
-        sortButton = addRenderableWidget(createTooltipButton(x + 155, y + 19, 39, 14,
+        sortButton = addRenderableWidget(createTooltipButton(x + 144, y + 17, 34, 14,
                 new TextComponent(sortLabel()), b -> cycleSort(),
                 "vaultfilters.gui.library.tooltip.sort"));
 
+        favoritesButton = addRenderableWidget(createTooltipButton(x + 182, y + 17, 20, 14,
+                new TextComponent(favoritesLabel()), b -> toggleFavorites(),
+                "vaultfilters.gui.library.tooltip.favorites"));
+
         if (contextType != null) {
-            showAllButton = addRenderableWidget(createTooltipButton(x + 198, y + 19, 48, 14,
+            showAllButton = addRenderableWidget(createTooltipButton(x + 206, y + 17, 42, 14,
                     new TranslatableComponent("vaultfilters.gui.library.show_all"), b -> toggleShowAll(),
                     "vaultfilters.gui.library.tooltip.show_all"));
         }
@@ -165,7 +171,13 @@ public class FilterLibraryScreen extends Screen {
         int groupGap = 4;
         boolean hasApply = onApply != null && contextType != null;
 
-        int row2Y = y + GUI_HEIGHT - 26;
+        int bottomButtonsHeight = hasApply ? 52 : 32;
+        int availableListHeight = GUI_HEIGHT - 48 - bottomButtonsHeight;
+        int visibleRows = availableListHeight / ROW_HEIGHT;
+        int actualListHeight = visibleRows * ROW_HEIGHT;
+        listBottom = y + 48 + actualListHeight;
+
+        int row2Y = listBottom + 8;
         int mgmtCount = 6;
         int mgmtTotalW = mgmtCount * btnW + (mgmtCount - 1) * gap + 2 * groupGap;
         int mgmtStartX = x + (GUI_WIDTH - mgmtTotalW) / 2;
@@ -201,7 +213,7 @@ public class FilterLibraryScreen extends Screen {
                         "vaultfilters.gui.library.tooltip.delete"));
 
         if (hasApply) {
-            int row1Y = y + GUI_HEIGHT - 46;
+            int row1Y = listBottom + 8;
             int applyBtnW = 110;
             int applyTotalW = 2 * applyBtnW + 4;
             int applyStartX = x + (GUI_WIDTH - applyTotalW) / 2;
@@ -257,17 +269,41 @@ public class FilterLibraryScreen extends Screen {
 
     private void toggleShowAll() {
         showOtherType = !showOtherType;
-        if (showOtherType) {
-            allFilters = FilterLibraryStore.list();
-        } else if (contextType != null) {
-            allFilters = FilterLibraryStore.listByType(contextType);
-        }
+        refreshAllFilters();
         if (showAllButton != null) {
             showAllButton.setMessage(new TranslatableComponent(
                     showOtherType ? "vaultfilters.gui.library.hide_other" : "vaultfilters.gui.library.show_all"));
         }
         applySearchAndSort();
         scrollOffset = 0;
+    }
+
+    private String favoritesLabel() {
+        return showFavoritesOnly ? "\u2605" : "\u2606";
+    }
+
+    private void toggleFavorites() {
+        showFavoritesOnly = !showFavoritesOnly;
+        favoritesButton.setMessage(new TextComponent(favoritesLabel()));
+        refreshAllFilters();
+        applySearchAndSort();
+        scrollOffset = 0;
+    }
+
+    private void refreshAllFilters() {
+        if (showFavoritesOnly) {
+            if (showOtherType || contextType == null) {
+                allFilters = FilterLibraryStore.listFavorites();
+            } else {
+                allFilters = FilterLibraryStore.listFavorites(contextType);
+            }
+        } else {
+            if (showOtherType || contextType == null) {
+                allFilters = FilterLibraryStore.list();
+            } else {
+                allFilters = FilterLibraryStore.listByType(contextType);
+            }
+        }
     }
 
     private void onApplyFilter(boolean merge) {
@@ -326,6 +362,7 @@ public class FilterLibraryScreen extends Screen {
         SavedFilter sel = selectedFilter();
         boolean selected = sel != null;
         boolean renamingActive = renaming;
+        favoritesButton.active = !renamingActive;
         if (applyReplaceButton != null) {
             applyReplaceButton.active = selected && !renamingActive && sel != null && contextType != null
                     && sel.type() == contextType;
@@ -443,23 +480,24 @@ public class FilterLibraryScreen extends Screen {
             }
         }
 
-        drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
+        drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 6, 0xFFFFFF);
 
         String showingLabel;
+        String favPrefix = showFavoritesOnly ? "\u2605 " : "";
         if (showOtherType) {
-            showingLabel = "Showing: All";
+            showingLabel = "Showing: " + favPrefix + "All";
         } else if (contextType == SavedFilterType.ATTRIBUTE_FILTER) {
-            showingLabel = "Showing: Attribute Filters";
+            showingLabel = "Showing: " + favPrefix + "Attribute Filters";
         } else if (contextType == SavedFilterType.LIST_FILTER) {
-            showingLabel = "Showing: List Filters";
+            showingLabel = "Showing: " + favPrefix + "List Filters";
         } else {
-            showingLabel = "Showing: All";
+            showingLabel = "Showing: " + favPrefix + "All";
         }
         String countLabel = filters.size() + "/" + FilterLibraryStore.MAX_LIBRARY_ENTRIES;
         int panelX = (width - GUI_WIDTH) / 2;
         int panelY = (height - GUI_HEIGHT) / 2;
-        font.draw(ms, showingLabel, panelX + 10, panelY + 38, 0xC0C0C0);
-        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 38, 0x808080);
+        font.draw(ms, showingLabel, panelX + 10, panelY + 36, 0xC0C0C0);
+        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 36, 0x808080);
 
         if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
             font.draw(ms, new TranslatableComponent("vaultfilters.gui.library.search"),
@@ -501,7 +539,11 @@ public class FilterLibraryScreen extends Screen {
                 fill(ms, listLeft, rowTop, listRight, rowBottom, 0x33FFFFFF);
             }
 
-            font.draw(ms, filter.name(), listLeft + 4, rowTop + 2, 0xFFFFFF);
+            String star = filter.favorite() ? "\u2605" : "\u2606";
+            int starColor = filter.favorite() ? 0xFFFF55 : 0x606060;
+            font.draw(ms, star, listLeft + 2, rowTop + 2, starColor);
+
+            font.draw(ms, filter.name(), listLeft + 14, rowTop + 2, 0xFFFFFF);
 
             String typeLabel = filter.type() == SavedFilterType.ATTRIBUTE_FILTER ? "Attr" : "List";
             font.draw(ms, typeLabel, listRight - 30, rowTop + 2, 0x808080);
@@ -838,6 +880,14 @@ public class FilterLibraryScreen extends Screen {
                 int rowTop = listTop + (i - scrollOffset) * ROW_HEIGHT;
                 int rowBottom = rowTop + ROW_HEIGHT;
                 if (mouseY >= rowTop && mouseY < rowBottom) {
+                    boolean onStar = mouseX >= listLeft + 2 && mouseX <= listLeft + 12;
+                    if (onStar) {
+                        SavedFilter sf = filters.get(i);
+                        sf.toggleFavorite();
+                        FilterLibraryStore.upsert(sf);
+                        setStatus(sf.favorite() ? "Favorited \"" + sf.name() + "\"" : "Unfavorited \"" + sf.name() + "\"");
+                        return true;
+                    }
                     if (searchBox != null)
                         searchBox.changeFocus(false);
                     selectedId = filters.get(i).id();
@@ -996,6 +1046,7 @@ public class FilterLibraryScreen extends Screen {
         if (searchBox != null)
             searchBox.setEditable(false);
         sortButton.active = false;
+        favoritesButton.active = false;
         if (showAllButton != null)
             showAllButton.active = false;
     }
@@ -1038,6 +1089,7 @@ public class FilterLibraryScreen extends Screen {
         if (searchBox != null)
             searchBox.setEditable(true);
         sortButton.active = true;
+        favoritesButton.active = true;
         if (showAllButton != null)
             showAllButton.active = true;
         setFocused(null);
@@ -1105,11 +1157,7 @@ public class FilterLibraryScreen extends Screen {
     }
 
     void refreshList() {
-        if (showOtherType || contextType == null) {
-            allFilters = FilterLibraryStore.list();
-        } else {
-            allFilters = FilterLibraryStore.listByType(contextType);
-        }
+        refreshAllFilters();
         applySearchAndSort();
         int panelHeight = listBottom - listTop;
         int visibleCount = panelHeight / ROW_HEIGHT;

@@ -442,5 +442,6 @@
   "vaultfilters.gui.library.tooltip.apply_replace": "Replace the open filter with this one",
   "vaultfilters.gui.library.tooltip.apply_merge": "Merge this filter into the open filter",
   "vaultfilters.gui.library.tooltip.sort": "Cycle sort order: Name \u2192 Newest \u2192 Oldest",
-  "vaultfilters.gui.library.tooltip.show_all": "Toggle between showing only this filter type and showing all filters"
+  "vaultfilters.gui.library.tooltip.show_all": "Toggle between showing only this filter type and showing all filters",
+  "vaultfilters.gui.library.tooltip.favorites": "Toggle showing only favorites"
 }

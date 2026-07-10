@@ -84,8 +84,9 @@ public final class FilterLibraryStore {
                     UUID id = UUID.fromString(idStr);
                     if (name == null) name = "";
                     if (name.length() > 35) name = name.substring(0, 35);
+                    boolean favorite = obj.has("favorite") && obj.get("favorite").getAsBoolean();
 
-                    entries.put(id, new SavedFilter(id, type, name, createdAt, updatedAt, payload));
+                    entries.put(id, new SavedFilter(id, type, name, createdAt, updatedAt, payload, favorite));
                 } catch (Exception e) {
                     skipped++;
                 }
@@ -135,6 +136,24 @@ public final class FilterLibraryStore {
     public static List<SavedFilter> listByType(SavedFilterType type, SortMode sort) {
         List<SavedFilter> result = listByType(type);
         sort.sort(result);
+        return result;
+    }
+
+    public static List<SavedFilter> listFavorites() {
+        ensureLoaded();
+        List<SavedFilter> result = new ArrayList<>();
+        for (SavedFilter sf : entries.values()) {
+            if (sf.favorite()) result.add(sf);
+        }
+        return result;
+    }
+
+    public static List<SavedFilter> listFavorites(SavedFilterType type) {
+        ensureLoaded();
+        List<SavedFilter> result = new ArrayList<>();
+        for (SavedFilter sf : entries.values()) {
+            if (sf.favorite() && sf.type() == type) result.add(sf);
+        }
         return result;
     }
 
@@ -242,6 +261,7 @@ public final class FilterLibraryStore {
                 obj.addProperty("name", sf.name());
                 obj.addProperty("createdAt", sf.createdAt());
                 obj.addProperty("updatedAt", sf.updatedAt());
+                obj.addProperty("favorite", sf.favorite());
                 obj.add("payload", sf.payload());
                 arr.add(obj);
             }
