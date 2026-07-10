@@ -136,12 +136,12 @@ public class FilterLibraryScreen extends Screen {
         int y = (height - GUI_HEIGHT) / 2;
 
         listLeft = x + 10;
-        listTop = y + 48;
+        listTop = y + 52;
         listRight = x + GUI_WIDTH - 10;
         scrollOffset = 0;
         selectedId = null;
 
-        searchBox = new EditBox(font, x + 10, y + 18, 130, 12, new TextComponent(""));
+        searchBox = new EditBox(font, x + 10, y + 22, 130, 12, new TextComponent(""));
         searchBox.setMaxLength(50);
         searchBox.setBordered(false);
         searchBox.setTextColor(0xFFFFFF);
@@ -151,16 +151,16 @@ public class FilterLibraryScreen extends Screen {
         });
         addRenderableWidget(searchBox);
 
-        sortButton = addRenderableWidget(createTooltipButton(x + 144, y + 17, 34, 14,
+        sortButton = addRenderableWidget(createTooltipButton(x + 144, y + 21, 34, 14,
                 new TextComponent(sortLabel()), b -> cycleSort(),
                 "vaultfilters.gui.library.tooltip.sort"));
 
-        favoritesButton = addRenderableWidget(createTooltipButton(x + 182, y + 17, 20, 14,
+        favoritesButton = addRenderableWidget(createTooltipButton(x + 182, y + 21, 20, 14,
                 new TextComponent(favoritesLabel()), b -> toggleFavorites(),
                 "vaultfilters.gui.library.tooltip.favorites"));
 
         if (contextType != null) {
-            showAllButton = addRenderableWidget(createTooltipButton(x + 206, y + 17, 42, 14,
+            showAllButton = addRenderableWidget(createTooltipButton(x + 206, y + 21, 42, 14,
                     new TranslatableComponent("vaultfilters.gui.library.show_all"), b -> toggleShowAll(),
                     "vaultfilters.gui.library.tooltip.show_all"));
         }
@@ -172,12 +172,13 @@ public class FilterLibraryScreen extends Screen {
         boolean hasApply = onApply != null && contextType != null;
 
         int bottomButtonsHeight = hasApply ? 52 : 32;
-        int availableListHeight = GUI_HEIGHT - 48 - bottomButtonsHeight;
+        int availableListHeight = GUI_HEIGHT - 52 - bottomButtonsHeight;
         int visibleRows = availableListHeight / ROW_HEIGHT;
         int actualListHeight = visibleRows * ROW_HEIGHT;
-        listBottom = y + 48 + actualListHeight;
+        listBottom = y + 52 + actualListHeight;
 
-        int row2Y = listBottom + 8;
+        int row1Y = hasApply ? listBottom + 8 : 0;
+        int row2Y = hasApply ? row1Y + 20 : listBottom + 8;
         int mgmtCount = 6;
         int mgmtTotalW = mgmtCount * btnW + (mgmtCount - 1) * gap + 2 * groupGap;
         int mgmtStartX = x + (GUI_WIDTH - mgmtTotalW) / 2;
@@ -213,7 +214,6 @@ public class FilterLibraryScreen extends Screen {
                         "vaultfilters.gui.library.tooltip.delete"));
 
         if (hasApply) {
-            int row1Y = listBottom + 8;
             int applyBtnW = 110;
             int applyTotalW = 2 * applyBtnW + 4;
             int applyStartX = x + (GUI_WIDTH - applyTotalW) / 2;
@@ -419,7 +419,7 @@ public class FilterLibraryScreen extends Screen {
         renderBg(ms);
 
         if (renaming) {
-            fill(ms, 0, 0, width, height, 0x88000000);
+            fill(ms, 0, 0, width, height, 0xCC000000);
             int rx = (width - 180) / 2;
             int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
             fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xFF333333);
@@ -496,8 +496,8 @@ public class FilterLibraryScreen extends Screen {
         String countLabel = filters.size() + "/" + FilterLibraryStore.MAX_LIBRARY_ENTRIES;
         int panelX = (width - GUI_WIDTH) / 2;
         int panelY = (height - GUI_HEIGHT) / 2;
-        font.draw(ms, showingLabel, panelX + 10, panelY + 36, 0xC0C0C0);
-        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 36, 0x808080);
+        font.draw(ms, showingLabel, panelX + 10, panelY + 40, 0xC0C0C0);
+        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 40, 0x808080);
 
         if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
             font.draw(ms, new TranslatableComponent("vaultfilters.gui.library.search"),
