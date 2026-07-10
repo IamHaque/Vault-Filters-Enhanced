@@ -33,6 +33,8 @@ public class FilterLibraryScreen extends Screen {
     private int listRight;
     private int listBottom;
     private static final int ROW_HEIGHT = 24;
+    private static final int SCROLLBAR_WIDTH = 3;
+    private static final int SCROLLBAR_MIN_HEIGHT = 12;
 
     private int scrollOffset;
     private UUID selectedId;
@@ -323,6 +325,7 @@ public class FilterLibraryScreen extends Screen {
         renderBg(ms);
         super.render(ms, mouseX, mouseY, partialTicks);
         renderList(ms, mouseX, mouseY, partialTicks);
+        renderScrollbar(ms);
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
 
@@ -397,6 +400,26 @@ public class FilterLibraryScreen extends Screen {
             String timeStr = formatTime(filter.updatedAt());
             font.draw(ms, timeStr, listLeft + 4, rowTop + 12, 0x606060);
         }
+    }
+
+    private void renderScrollbar(PoseStack ms) {
+        int panelHeight = listBottom - listTop;
+        int visibleCount = panelHeight / ROW_HEIGHT;
+        int totalCount = filters.size();
+        if (totalCount <= visibleCount) return;
+
+        int trackLeft = listRight + 1;
+        int trackRight = trackLeft + SCROLLBAR_WIDTH;
+
+        fill(ms, trackLeft, listTop, trackRight, listBottom, 0x33FFFFFF);
+
+        float ratio = (float) visibleCount / totalCount;
+        int thumbHeight = Math.max(SCROLLBAR_MIN_HEIGHT, (int) (panelHeight * ratio));
+        int maxScroll = totalCount - visibleCount;
+        float scrollFraction = maxScroll > 0 ? (float) scrollOffset / maxScroll : 0f;
+        int thumbTop = listTop + (int) ((panelHeight - thumbHeight) * scrollFraction);
+
+        fill(ms, trackLeft, thumbTop, trackRight, thumbTop + thumbHeight, 0xAAFFFFFF);
     }
 
     private static String formatTime(long timestamp) {
