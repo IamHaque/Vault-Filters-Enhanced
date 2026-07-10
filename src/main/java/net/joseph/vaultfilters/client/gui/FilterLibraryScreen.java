@@ -48,6 +48,8 @@ public class FilterLibraryScreen extends Screen {
     private int scrollOffset;
     private UUID selectedId;
     private Button importButton;
+    private Button exportButton;
+    private Button treeButton;
     private Button applyReplaceButton;
     private Button applyMergeButton;
 
@@ -83,6 +85,8 @@ public class FilterLibraryScreen extends Screen {
     private UUID actionMenuFilterId;
     private boolean actionMenuDeleteConfirm;
     private int actionMenuHoveredIndex = -1;
+    private int actionMenuHoverTicks;
+    private int actionMenuPrevHoverIndex = -1;
     private Button actionCancelButton;
 
     private int closeX;
@@ -95,14 +99,12 @@ public class FilterLibraryScreen extends Screen {
 
     private static final int ACTION_MENU_W = 190;
     private static final int ACTION_ITEM_H = 18;
-    private static final int ACTION_COUNT = 7;
+    private static final int ACTION_COUNT = 5;
     private static final int ACTION_FAV = 0;
     private static final int ACTION_REN = 1;
     private static final int ACTION_DUP = 2;
     private static final int ACTION_SHR = 3;
-    private static final int ACTION_EXP = 4;
-    private static final int ACTION_TRE = 5;
-    private static final int ACTION_DEL = 6;
+    private static final int ACTION_DEL = 4;
 
     private static final int TOOLTIP_DELAY_TICKS = 20;
     private final Map<Button, String> tooltipMap = new IdentityHashMap<>();
@@ -202,7 +204,7 @@ public class FilterLibraryScreen extends Screen {
         int row1Y = hasApply ? listBottom + 8 : 0;
         int row2Y = hasApply ? row1Y + 22 : listBottom + 8;
 
-        int importBtnW = 60;
+        int btnRowW = 54;
         int applyBtnW = 64;
 
         if (hasApply) {
@@ -217,9 +219,18 @@ public class FilterLibraryScreen extends Screen {
                             "vaultfilters.gui.library.tooltip.apply_merge"));
         }
 
-        importButton = addRenderableWidget(createTooltipButton(x + (GUI_WIDTH - importBtnW) / 2, row2Y, importBtnW, btnH,
+        int bottomTotalW = 3 * btnRowW + 2 * 4;
+        int bottomStartX = x + (GUI_WIDTH - bottomTotalW) / 2;
+        importButton = addRenderableWidget(createTooltipButton(bottomStartX, row2Y, btnRowW, btnH,
                 new TranslatableComponent("vaultfilters.gui.library.import"), b -> onImport(),
                 "vaultfilters.gui.library.tooltip.import"));
+        exportButton = addRenderableWidget(createTooltipButton(bottomStartX + btnRowW + 4, row2Y, btnRowW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.export"), b -> onExport(),
+                "vaultfilters.gui.library.tooltip.export"));
+        treeButton = addRenderableWidget(
+                createTooltipButton(bottomStartX + 2 * (btnRowW + 4), row2Y, btnRowW, btnH,
+                        new TranslatableComponent("vaultfilters.gui.library.tree"), b -> onTree(),
+                        "vaultfilters.gui.library.tooltip.tree"));
 
         closeX = x + GUI_WIDTH - 14;
         closeY = y + 4;
@@ -341,6 +352,13 @@ public class FilterLibraryScreen extends Screen {
             cachedPreviewLines = null;
             cachedPreviewId = null;
         }
+
+        if (actionMenuHoveredIndex != actionMenuPrevHoverIndex) {
+            actionMenuHoverTicks = 0;
+            actionMenuPrevHoverIndex = actionMenuHoveredIndex;
+        } else {
+            actionMenuHoverTicks++;
+        }
     }
 
     private SavedFilter selectedFilter() {
@@ -377,12 +395,16 @@ public class FilterLibraryScreen extends Screen {
                     && sel.type() == contextType;
         }
         importButton.active = !modalActive;
+        if (exportButton != null) exportButton.active = selected && !modalActive;
+        if (treeButton != null) treeButton.active = selected && !modalActive;
     }
 
     private void setModalActive(boolean active) {
         if (applyReplaceButton != null) applyReplaceButton.active = !active;
         if (applyMergeButton != null) applyMergeButton.active = !active;
         importButton.active = !active;
+        if (exportButton != null) exportButton.active = !active;
+        if (treeButton != null) treeButton.active = !active;
         if (searchBox != null) searchBox.setEditable(!active);
         sortButton.active = !active;
         favoritesButton.active = !active;
@@ -520,6 +542,17 @@ public class FilterLibraryScreen extends Screen {
             }
         }
 
+        if (actionMenuOpen && actionMenuHoveredIndex >= 0 && actionMenuHoverTicks >= TOOLTIP_DELAY_TICKS) {
+            String[] actionTooltips = {
+                    "vaultfilters.gui.library.tooltip.favorite",
+                    "vaultfilters.gui.library.tooltip.rename",
+                    "vaultfilters.gui.library.tooltip.duplicate",
+                    "vaultfilters.gui.library.tooltip.share",
+                    "vaultfilters.gui.library.tooltip.delete"
+            };
+            renderTooltip(ms, new TranslatableComponent(actionTooltips[actionMenuHoveredIndex]), mouseX, mouseY);
+        }
+
         if (statusMessage != null && System.currentTimeMillis() < statusMessageUntil) {
             drawCenteredString(ms, font, new TextComponent(statusMessage),
                     width / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT + 8, 0xFFFF55);
@@ -538,20 +571,20 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void renderRenameModal(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
-        int rx = (width - 180) / 2;
-        int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
-        fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xFF333333);
+        fill(ms, listLeft, listTop, listRight, listBottom, OVERLAY_COLOR);
+        int rx = (width - 200) / 2;
+        int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 36;
+        fill(ms, rx - 4, ry - 4, rx + 208, ry + 96, 0xFF333333);
 
         drawCenteredString(ms, font, new TranslatableComponent("vaultfilters.gui.library.rename.title"),
-                width / 2, ry + 2, 0xFFFFFF);
+                width / 2, ry + 4, 0xFFFFFF);
 
-        boolean hoverX = mouseX >= rx + 178 && mouseX <= rx + 188 && mouseY >= ry - 2 && mouseY <= ry + 8;
-        renderCloseButton(ms, rx + 178, ry - 2, hoverX);
+        boolean hoverX = mouseX >= rx + 198 && mouseX <= rx + 208 && mouseY >= ry - 2 && mouseY <= ry + 8;
+        renderCloseButton(ms, rx + 198, ry - 2, hoverX);
     }
 
     private void renderShareModal(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
+        fill(ms, listLeft, listTop, listRight, listBottom, OVERLAY_COLOR);
         int sx = (width - 200) / 2;
         int sy = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 36;
         fill(ms, sx - 4, sy - 4, sx + 208, sy + 96, 0xFF333333);
@@ -563,18 +596,14 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void renderActionMenu(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
+        fill(ms, listLeft, listTop, listRight, listBottom, OVERLAY_COLOR);
 
         int cx = (width - ACTION_MENU_W) / 2;
         int cy = (height - 172) / 2;
 
         fill(ms, cx, cy, cx + ACTION_MENU_W, cy + 172, 0xFF333333);
 
-        drawCenteredString(ms, font, "Filter Actions", width / 2, cy + 13, 0xFFFFFF);
-
-        boolean hoverX = mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
-                && mouseY >= cy + 2 && mouseY <= cy + 12;
-        renderCloseButton(ms, cx + ACTION_MENU_W - 14, cy + 2, hoverX);
+        drawCenteredString(ms, font, "Filter Actions", width / 2, cy + 8, 0xFFFFFF);
 
         fill(ms, cx + 4, cy + 18, cx + ACTION_MENU_W - 4, cy + 19, 0xFF555555);
 
@@ -594,9 +623,8 @@ public class FilterLibraryScreen extends Screen {
 
             switch (i) {
                 case ACTION_FAV: {
-                    AllIcons.I_ACTIVE.render(ms, cx + 6, itemY + 1);
-                    int color = 0xFFFF55;
-                    font.draw(ms, isFav ? "\u2605 Favorite" : "\u2606 Favorite", cx + 24, itemY + 3, color);
+                    font.draw(ms, isFav ? "\u2605" : "\u2606", cx + 9, itemY + 3, 0xFFFF55);
+                    font.draw(ms, isFav ? "Unfavorite" : "Favorite", cx + 24, itemY + 3, 0xFFFF55);
                     break;
                 }
                 case ACTION_REN:
@@ -611,14 +639,6 @@ public class FilterLibraryScreen extends Screen {
                     font.draw(ms, "\u2192", cx + 9, itemY + 3, 0xFFFFFF);
                     font.draw(ms, "Share", cx + 24, itemY + 3, 0xFFFFFF);
                     break;
-                case ACTION_EXP:
-                    AllIcons.I_OPEN_FOLDER.render(ms, cx + 6, itemY + 1);
-                    font.draw(ms, "Export", cx + 24, itemY + 3, 0xFFFFFF);
-                    break;
-                case ACTION_TRE:
-                    AllIcons.I_SCHEMATIC.render(ms, cx + 6, itemY + 1);
-                    font.draw(ms, "Tree", cx + 24, itemY + 3, 0xFFFFFF);
-                    break;
                 case ACTION_DEL: {
                     AllIcons.I_TRASH.render(ms, cx + 6, itemY + 1);
                     int delColor = 0xFF5555;
@@ -629,8 +649,8 @@ public class FilterLibraryScreen extends Screen {
             }
         }
 
-        fill(ms, cx + 4, cy + 22 + ACTION_COUNT * ACTION_ITEM_H, cx + ACTION_MENU_W - 4,
-                cy + 23 + ACTION_COUNT * ACTION_ITEM_H, 0xFF555555);
+        int bottomDividerY = cy + 22 + ACTION_COUNT * ACTION_ITEM_H + 3;
+        fill(ms, cx + 4, bottomDividerY, cx + ACTION_MENU_W - 4, bottomDividerY + 1, 0xFF555555);
     }
 
     private void renderList(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
@@ -702,18 +722,15 @@ public class FilterLibraryScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (searchBox != null && !searchBox.isMouseOver(mouseX, mouseY)) {
-            searchBox.changeFocus(false);
-        }
 
         if (renaming) {
             if (renameBox != null && renameBox.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
             if (button == 0) {
-                int rx = (width - 180) / 2;
-                int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
-                if (mouseX >= rx + 178 && mouseX <= rx + 188 && mouseY >= ry - 2 && mouseY <= ry + 8) {
+                int rx = (width - 200) / 2;
+                int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 36;
+                if (mouseX >= rx + 198 && mouseX <= rx + 208 && mouseY >= ry - 2 && mouseY <= ry + 8) {
                     cancelRename();
                     return true;
                 }
@@ -759,12 +776,6 @@ public class FilterLibraryScreen extends Screen {
 
                 boolean inPanel = mouseX >= cx && mouseX <= cx + ACTION_MENU_W && mouseY >= cy && mouseY <= cy + 172;
 
-                if (mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
-                        && mouseY >= cy + 2 && mouseY <= cy + 12) {
-                    closeActionMenu();
-                    return true;
-                }
-
                 if (inPanel) {
                     int itemY = cy + 22;
                     for (int i = 0; i < ACTION_COUNT; i++) {
@@ -775,7 +786,7 @@ public class FilterLibraryScreen extends Screen {
                         itemY += ACTION_ITEM_H;
                     }
 
-                    int cancelY = cy + 150;
+                    int cancelY = cy + 136;
                     int cancelCX = cx + (ACTION_MENU_W - 80) / 2;
                     if (mouseX >= cancelCX && mouseX <= cancelCX + 80 && mouseY >= cancelY && mouseY <= cancelY + 16) {
                         closeActionMenu();
@@ -925,8 +936,8 @@ public class FilterLibraryScreen extends Screen {
         int cx = (width - ACTION_MENU_W) / 2;
         int cy = (height - 172) / 2;
         int cancelCX = cx + (ACTION_MENU_W - 80) / 2;
-        actionCancelButton = addRenderableWidget(new Button(cancelCX, cy + 150, 80, 16,
-                new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> closeActionMenu()));
+        actionCancelButton = addRenderableWidget(new Button(cancelCX, cy + 136, 80, 16,
+                new TranslatableComponent("vaultfilters.gui.library.close"), b -> closeActionMenu()));
 
         updateButtonStates();
     }
@@ -952,7 +963,6 @@ public class FilterLibraryScreen extends Screen {
 
         switch (index) {
             case ACTION_FAV:
-                sf.toggleFavorite();
                 FilterLibraryStore.toggleFavorite(sf.id());
                 setStatus(sf.favorite() ? "Favorited \"" + sf.name() + "\"" : "Unfavorited \"" + sf.name() + "\"");
                 closeActionMenu();
@@ -972,14 +982,6 @@ public class FilterLibraryScreen extends Screen {
             case ACTION_SHR:
                 closeActionMenu();
                 beginShare(sf);
-                break;
-            case ACTION_EXP:
-                onExport();
-                closeActionMenu();
-                break;
-            case ACTION_TRE:
-                onTree();
-                closeActionMenu();
                 break;
             case ACTION_DEL:
                 if (!actionMenuDeleteConfirm) {
@@ -1066,7 +1068,7 @@ public class FilterLibraryScreen extends Screen {
     private void beginRename(SavedFilter filter) {
         renaming = true;
         renameTarget = filter;
-        renameBox = new EditBox(font, (width - 176) / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 16, 176, 16,
+        renameBox = new EditBox(font, (width - 192) / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 16, 176, 14,
                 new TextComponent(""));
         renameBox.setMaxLength(MAX_FILTER_NAME_LENGTH);
         renameBox.setValue(filter.name());
@@ -1075,12 +1077,12 @@ public class FilterLibraryScreen extends Screen {
         renameBox.setCursorPosition(filter.name().length());
         setFocused(renameBox);
 
-        int y = renameBox.y + 20;
+        int y = renameBox.y + 56;
         int cx = (width - 80) / 2;
         renameConfirmButton = addRenderableWidget(new Button(cx, y, 38, 16,
                 new TranslatableComponent("vaultfilters.gui.library.rename.confirm"), b -> confirmRename()));
         renameCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
-                new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelRename()));
+                new TranslatableComponent("vaultfilters.gui.library.cancel"), b -> cancelRename()));
 
         setModalActive(true);
     }
@@ -1134,8 +1136,7 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void onExport() {
-        SavedFilter sel = selectedFilterForAction();
-        if (sel == null) sel = selectedFilter();
+        SavedFilter sel = selectedFilter();
         if (sel == null) return;
 
         try {
@@ -1148,8 +1149,7 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void onTree() {
-        SavedFilter sel = selectedFilterForAction();
-        if (sel == null) sel = selectedFilter();
+        SavedFilter sel = selectedFilter();
         if (sel == null) return;
 
         try {
@@ -1203,7 +1203,7 @@ public class FilterLibraryScreen extends Screen {
         shareConfirmButton = addRenderableWidget(new Button(cx, y, 38, 16,
                 new TranslatableComponent("vaultfilters.gui.library.share.confirm"), b -> confirmShare()));
         shareCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
-                new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelShare()));
+                new TranslatableComponent("vaultfilters.gui.library.cancel"), b -> cancelShare()));
 
         setModalActive(true);
     }

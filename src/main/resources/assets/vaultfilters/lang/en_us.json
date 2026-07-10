@@ -409,6 +409,10 @@
   "vaultfilters.screen.filter_library.empty": "No saved filters",
 
   "vaultfilters.gui.library.import": "Import",
+  "vaultfilters.gui.library.export": "Export",
+  "vaultfilters.gui.library.tree": "Tree",
+  "vaultfilters.gui.library.cancel": "Cancel",
+  "vaultfilters.gui.library.close": "Close",
   "vaultfilters.gui.library.share.title": "Share Filter",
   "vaultfilters.gui.library.share.confirm": "Send",
 
@@ -431,6 +435,13 @@
   "vaultfilters.gui.library.overwrite.message": "A filter named \"%1$s\" already exists. Overwrite it?",
 
   "vaultfilters.gui.library.tooltip.import": "Import a filter from clipboard",
+  "vaultfilters.gui.library.tooltip.export": "Copy filter data to clipboard",
+  "vaultfilters.gui.library.tooltip.tree": "Copy tree-view data to clipboard",
+  "vaultfilters.gui.library.tooltip.favorite": "Mark/unmark this filter as favorite",
+  "vaultfilters.gui.library.tooltip.rename": "Rename this filter",
+  "vaultfilters.gui.library.tooltip.duplicate": "Create a copy of this filter",
+  "vaultfilters.gui.library.tooltip.share": "Send this filter to another online player",
+  "vaultfilters.gui.library.tooltip.delete": "Delete this filter from the library",
   "vaultfilters.gui.library.tooltip.apply_replace": "Replace the open filter with this one",
   "vaultfilters.gui.library.tooltip.apply_merge": "Merge this filter into the open filter",
   "vaultfilters.gui.library.tooltip.sort": "Cycle sort order: Name \u2192 Newest \u2192 Oldest",
