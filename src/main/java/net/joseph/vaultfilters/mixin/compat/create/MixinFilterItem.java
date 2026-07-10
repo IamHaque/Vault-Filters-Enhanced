@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = FilterItem.class,remap = false)
 public class MixinFilterItem {
+    @SuppressWarnings({"target", "mapping"})
     @Inject(method = "use",at = @At(value = "INVOKE",
             target = "Lnet/minecraftforge/network/NetworkHooks;openGui(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)V"
     ,shift = At.Shift.BEFORE),remap = true)

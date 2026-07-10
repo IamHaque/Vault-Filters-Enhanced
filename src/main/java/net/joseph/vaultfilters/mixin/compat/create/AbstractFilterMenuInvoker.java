@@ -7,6 +7,6 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(AbstractFilterMenu.class)
 public interface AbstractFilterMenuInvoker {
-    @Invoker("saveData")
+    @Invoker(value = "saveData", remap = false)
     void callSaveData(ItemStack contentHolder);
 }

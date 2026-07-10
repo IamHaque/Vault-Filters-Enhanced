@@ -37,8 +37,8 @@ public abstract class MixinAbstractFilterMenu extends GhostItemMenu<ItemStack> i
         this.name = name;
     }
     /**
-     * @author
-     * @reason
+     * @author Vault-Filters-Enhanced
+     * @reason Keep filter container open regardless of distance/conditions for nested filter operations
      */
     @Override
     public void removed(Player player) {
@@ -56,7 +56,10 @@ public abstract class MixinAbstractFilterMenu extends GhostItemMenu<ItemStack> i
         }
 
     }
-    //debug for nested filters
+    /**
+     * @author Vault-Filters-Enhanced
+     * @reason Keep filter container open regardless of distance/conditions for nested filter operations
+     */
     @Overwrite
     public boolean stillValid(Player player) {
         return true;

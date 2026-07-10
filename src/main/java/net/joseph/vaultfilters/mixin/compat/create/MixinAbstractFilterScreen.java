@@ -121,6 +121,7 @@ public abstract class MixinAbstractFilterScreen extends AbstractSimiContainerScr
         syncName();
         super.onClose();
     }
+    @SuppressWarnings("target")
     @Redirect(at= @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;closeContainer()V",remap = true),method = "lambda$init$1()V")
     public void sendOnClose(LocalPlayer instance) {
         syncName();

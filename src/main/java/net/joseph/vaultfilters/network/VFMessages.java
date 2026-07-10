@@ -8,6 +8,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 import java.util.Optional;
 
+@SuppressWarnings("removal")
 public class VFMessages {
     private static final String PROTOCOL_VERSION = "1";
     public static final SimpleChannel VFCHANNEL = NetworkRegistry.newSimpleChannel(

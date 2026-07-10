@@ -32,6 +32,7 @@ public enum VFGuiTextures implements ScreenElement {
         this(VaultFilters.MOD_ID, location, startX, startY, width, height);
     }
 
+    @SuppressWarnings("removal")
     private VFGuiTextures(String namespace, String location, int startX, int startY, int width, int height) {
         this.location = new ResourceLocation(namespace, "textures/gui/" + location + ".png");
         this.width = width;

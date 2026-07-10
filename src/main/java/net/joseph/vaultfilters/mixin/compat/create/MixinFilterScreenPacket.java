@@ -38,6 +38,7 @@ public class MixinFilterScreenPacket {
         return c;
     }
     //allows name change requests
+    @SuppressWarnings("target")
     @Inject(method = "lambda$handle$0(Lnet/minecraftforge/network/NetworkEvent$Context;)V", at = @At(value = "INVOKE_ASSIGN", target = "Lnet/minecraftforge/network/NetworkEvent$Context;getSender()Lnet/minecraft/server/level/ServerPlayer;",shift = At.Shift.AFTER) , remap = false, cancellable = true)
     public void checkForNameChange(NetworkEvent.Context context, CallbackInfo ci, @Local ServerPlayer player) {
         if (player != null) {

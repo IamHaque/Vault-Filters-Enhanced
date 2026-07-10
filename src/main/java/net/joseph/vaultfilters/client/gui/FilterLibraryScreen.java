@@ -380,7 +380,20 @@ public class FilterLibraryScreen extends Screen {
     public void render(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
         renderBackground(ms);
         renderBg(ms);
+
+        if (renaming) {
+            fill(ms, 0, 0, width, height, 0x88000000);
+            int rx = (width - 180) / 2;
+            int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
+            fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xFF333333);
+        }
+
         super.render(ms, mouseX, mouseY, partialTicks);
+
+        if (renaming && renameBox != null) {
+            renameBox.render(ms, mouseX, mouseY, partialTicks);
+        }
+
         renderList(ms, mouseX, mouseY, partialTicks);
         renderScrollbar(ms);
 
@@ -456,13 +469,6 @@ public class FilterLibraryScreen extends Screen {
         if (statusMessage != null && System.currentTimeMillis() < statusMessageUntil) {
             drawCenteredString(ms, font, new TextComponent(statusMessage),
                     width / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT + 8, 0xFFFF55);
-        }
-
-        if (renaming && renameBox != null) {
-            int rx = (width - 180) / 2;
-            int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
-            fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xCC333333);
-            renameBox.render(ms, mouseX, mouseY, partialTicks);
         }
 
         if (allFilters.isEmpty() && !renaming) {
@@ -822,7 +828,7 @@ public class FilterLibraryScreen extends Screen {
             if (renameBox != null && renameBox.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
-            return true;
+            return super.mouseClicked(mouseX, mouseY, button);
         }
         if (mouseX >= listLeft && mouseX <= listRight && mouseY >= listTop && mouseY <= listBottom) {
             int panelHeight = listBottom - listTop;
