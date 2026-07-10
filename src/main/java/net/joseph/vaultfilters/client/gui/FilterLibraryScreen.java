@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
 
 public class FilterLibraryScreen extends Screen {
     private static final int GUI_WIDTH = 256;
-    private static final int GUI_HEIGHT = 220;
+    private static final int GUI_HEIGHT = 240;
 
     private int listLeft;
     private int listTop;
@@ -111,7 +111,7 @@ public class FilterLibraryScreen extends Screen {
         listLeft = x + 10;
         listTop = y + 36;
         listRight = x + GUI_WIDTH - 10;
-        listBottom = y + GUI_HEIGHT - 40;
+        listBottom = y + GUI_HEIGHT - 58;
         scrollOffset = 0;
         selectedId = null;
 
@@ -133,44 +133,62 @@ public class FilterLibraryScreen extends Screen {
                     new TranslatableComponent("vaultfilters.gui.library.show_all"), b -> toggleShowAll()));
         }
 
-        int btnY = y + GUI_HEIGHT - 30;
         int btnW = 36;
         int btnH = 16;
         int gap = 2;
+        int groupGap = 4;
         boolean hasApply = onApply != null && contextType != null;
-        int btnCount = hasApply ? 8 : 6;
-        int totalW = btnCount * btnW + (btnCount - 1) * gap;
-        int startX = x + (GUI_WIDTH - totalW) / 2;
+
+        int row2Y = y + GUI_HEIGHT - 26;
+        int mgmtCount = 6;
+        int mgmtTotalW = mgmtCount * btnW + (mgmtCount - 1) * gap + 2 * groupGap;
+        int mgmtStartX = x + (GUI_WIDTH - mgmtTotalW) / 2;
 
         int idx = 0;
+        importButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap), row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.import"), b -> onImport(),
+                "vaultfilters.gui.library.tooltip.import"));
+        idx++;
+        renameButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap) + groupGap, row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.rename"), b -> onRename(),
+                "vaultfilters.gui.library.tooltip.rename"));
+        idx++;
+        duplicateButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap) + groupGap, row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.duplicate"), b -> onDuplicate(),
+                "vaultfilters.gui.library.tooltip.duplicate"));
+        idx++;
+        exportButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap) + 2 * groupGap, row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.export"), b -> onExport(),
+                "vaultfilters.gui.library.tooltip.export"));
+        idx++;
+        treeButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap) + 2 * groupGap, row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.tree"), b -> onTree(),
+                "vaultfilters.gui.library.tooltip.tree"));
+        idx++;
+        deleteButton = addRenderableWidget(createTooltipButton(mgmtStartX + idx * (btnW + gap) + 2 * groupGap, row2Y, btnW, btnH,
+                new TranslatableComponent("vaultfilters.gui.library.delete"), b -> onDelete(),
+                "vaultfilters.gui.library.tooltip.delete"));
+
         if (hasApply) {
-            applyReplaceButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                    new TranslatableComponent("vaultfilters.gui.library.apply_replace"), b -> onApplyFilter(false)));
-            idx++;
-            applyMergeButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                    new TranslatableComponent("vaultfilters.gui.library.apply_merge"), b -> onApplyFilter(true)));
-            idx++;
+            int row1Y = y + GUI_HEIGHT - 46;
+            int applyBtnW = 110;
+            int applyTotalW = 2 * applyBtnW + 4;
+            int applyStartX = x + (GUI_WIDTH - applyTotalW) / 2;
+            applyReplaceButton = addRenderableWidget(createTooltipButton(applyStartX, row1Y, applyBtnW, btnH,
+                    new TranslatableComponent("vaultfilters.gui.library.apply_replace"), b -> onApplyFilter(false),
+                    "vaultfilters.gui.library.tooltip.apply_replace"));
+            applyMergeButton = addRenderableWidget(createTooltipButton(applyStartX + applyBtnW + 4, row1Y, applyBtnW, btnH,
+                    new TranslatableComponent("vaultfilters.gui.library.apply_merge"), b -> onApplyFilter(true),
+                    "vaultfilters.gui.library.tooltip.apply_merge"));
         }
 
-        importButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.import"), b -> onImport()));
-        idx++;
-        renameButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.rename"), b -> onRename()));
-        idx++;
-        duplicateButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.duplicate"), b -> onDuplicate()));
-        idx++;
-        exportButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.export"), b -> onExport()));
-        idx++;
-        treeButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.tree"), b -> onTree()));
-        idx++;
-        deleteButton = addRenderableWidget(new Button(startX + idx * (btnW + gap), btnY, btnW, btnH,
-                new TranslatableComponent("vaultfilters.gui.library.delete"), b -> onDelete()));
-
         updateButtonStates();
+    }
+
+    private Button createTooltipButton(int x, int y, int w, int h, Component message, Button.OnPress onPress, String tooltipKey) {
+        return new Button(x, y, w, h, message, onPress,
+                (button, poseStack, mouseX, mouseY) ->
+                        renderTooltip(poseStack, new TranslatableComponent(tooltipKey), mouseX, mouseY));
     }
 
     private void applySearchAndSort() {
