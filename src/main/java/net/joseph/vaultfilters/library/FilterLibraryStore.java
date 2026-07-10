@@ -169,7 +169,7 @@ public final class FilterLibraryStore {
         if (sf != null) {
             if (newName == null) newName = "";
             if (newName.length() > 35) newName = newName.substring(0, 35);
-            sf.withName(newName).touch();
+            sf.setName(newName).touch();
             save();
         }
     }

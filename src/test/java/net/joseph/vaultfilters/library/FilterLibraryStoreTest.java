@@ -117,16 +117,16 @@ class FilterLibraryStoreTest {
     }
 
     @Test
-    void savedFilterWithNameAndWithPayloadMutate() {
+    void savedFilterSetNameAndSetPayloadMutate() {
         SavedFilter sf = SavedFilter.createNew(SavedFilterType.LIST_FILTER, "Original", new JsonObject());
         assertEquals("Original", sf.name());
 
-        sf.withName("Renamed");
+        sf.setName("Renamed");
         assertEquals("Renamed", sf.name());
 
         JsonObject newPayload = new JsonObject();
         newPayload.addProperty("key", "value");
-        sf.withPayload(newPayload);
+        sf.setPayload(newPayload);
         assertEquals("value", sf.payload().get("key").getAsString());
     }
 }

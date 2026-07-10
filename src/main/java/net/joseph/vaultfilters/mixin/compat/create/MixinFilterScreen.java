@@ -571,10 +571,15 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                     FilterUiUtils.LIST_FORMAT_SIMPLIFIED
             );
 
+            if (payload.toString().length() > FilterUiUtils.MAX_IMPORT_CHARS) {
+                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.payload_too_large").withStyle(ChatFormatting.RED));
+                return;
+            }
+
             if (vault_Filters$loadedLibraryId != null) {
                 SavedFilter existing = FilterLibraryStore.get(vault_Filters$loadedLibraryId);
                 if (existing != null) {
-                    existing.withPayload(payload).touch();
+                    existing.setPayload(payload).touch();
                     FilterLibraryStore.upsert(existing);
                     FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", existing.name()).withStyle(ChatFormatting.GREEN));
                     return;
@@ -592,7 +597,7 @@ public abstract class MixinFilterScreen extends AbstractFilterScreen<FilterMenu>
                 Minecraft.getInstance().setScreen(new ConfirmScreen(
                         (confirmed) -> {
                             if (confirmed) {
-                                capturedExisting.withPayload(capturedPayload).touch();
+                                capturedExisting.setPayload(capturedPayload).touch();
                                 FilterLibraryStore.upsert(capturedExisting);
                                 vault_Filters$loadedLibraryId = capturedExisting.id();
                                 FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", name).withStyle(ChatFormatting.GREEN));

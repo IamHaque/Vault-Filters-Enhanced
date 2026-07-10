@@ -50,12 +50,12 @@ public class SavedFilter {
         return payload;
     }
 
-    public SavedFilter withName(String newName) {
+    public SavedFilter setName(String newName) {
         this.name = newName;
         return this;
     }
 
-    public SavedFilter withPayload(JsonObject newPayload) {
+    public SavedFilter setPayload(JsonObject newPayload) {
         this.payload = newPayload;
         return this;
     }
