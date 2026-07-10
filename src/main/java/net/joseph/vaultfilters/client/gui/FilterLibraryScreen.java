@@ -276,8 +276,33 @@ public class FilterLibraryScreen extends Screen {
         }
     }
 
+    private void renderBg(PoseStack ms) {
+        int x = (width - GUI_WIDTH) / 2;
+        int y = (height - GUI_HEIGHT) / 2;
+
+        // Interior dark fill
+        fill(ms, x + 3, y + 3, x + GUI_WIDTH - 3, y + GUI_HEIGHT - 3, 0xFF2D2D2D);
+
+        // Brass frame corners
+        AllGuiTextures.BRASS_FRAME_TL.render(ms, x, y, this);
+        AllGuiTextures.BRASS_FRAME_TR.render(ms, x + GUI_WIDTH - 4, y, this);
+        AllGuiTextures.BRASS_FRAME_BL.render(ms, x, y + GUI_HEIGHT - 4, this);
+        AllGuiTextures.BRASS_FRAME_BR.render(ms, x + GUI_WIDTH - 4, y + GUI_HEIGHT - 4, this);
+
+        // Brass frame edges (stretched to fill gaps)
+        UIRenderHelper.drawStretched(ms, x + 4, y, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_TOP);
+        UIRenderHelper.drawStretched(ms, x + 4, y + GUI_HEIGHT - 3, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_BOTTOM);
+        UIRenderHelper.drawStretched(ms, x, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_LEFT);
+        UIRenderHelper.drawStretched(ms, x + GUI_WIDTH - 3, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_RIGHT);
+
+        // Gold accent line at the top of the list panel
+        fill(ms, x + 6, y + 17, x + GUI_WIDTH - 6, y + 18, 0xFFC99E3D);
+    }
+
     @Override
     public void render(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
+        renderBackground(ms);
+        renderBg(ms);
         super.render(ms, mouseX, mouseY, partialTicks);
         renderList(ms, mouseX, mouseY, partialTicks);
 

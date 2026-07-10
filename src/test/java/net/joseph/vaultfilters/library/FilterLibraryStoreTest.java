@@ -75,7 +75,7 @@ class FilterLibraryStoreTest {
         assertEquals("abcdefghijklmnopqrstuvwxyz12", truncated);
 
         String copyName = truncated + " (Copy)";
-        assertEquals(36, copyName.length());
+        assertEquals(35, copyName.length());
         assertTrue(copyName.endsWith(" (Copy)"));
     }
 
