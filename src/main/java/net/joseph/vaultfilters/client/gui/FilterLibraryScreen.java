@@ -12,7 +12,6 @@ import net.joseph.vaultfilters.util.FilterUiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextComponent;
@@ -26,7 +25,14 @@ public class FilterLibraryScreen extends Screen {
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 220;
 
-    private FilterList list;
+    private int listLeft;
+    private int listTop;
+    private int listRight;
+    private int listBottom;
+    private static final int ROW_HEIGHT = 24;
+
+    private int scrollOffset;
+    private UUID selectedId;
     private Button importButton;
     private Button renameButton;
     private Button duplicateButton;
@@ -58,14 +64,12 @@ public class FilterLibraryScreen extends Screen {
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
 
-        list = new FilterList(this, Minecraft.getInstance(), GUI_WIDTH - 20, GUI_HEIGHT - 60, y + 20, y + GUI_HEIGHT - 40, 24);
-        list.setLeftPos(x + 10);
-        list.setRightPos(x + GUI_WIDTH - 10);
-        addWidget(list);
-
-        for (SavedFilter filter : filters) {
-            list.addFilterEntry(new FilterEntry(this, filter));
-        }
+        listLeft = x + 10;
+        listTop = y + 20;
+        listRight = x + GUI_WIDTH - 10;
+        listBottom = y + GUI_HEIGHT - 40;
+        scrollOffset = 0;
+        selectedId = null;
 
         int btnY = y + GUI_HEIGHT - 30;
         int btnW = 36;
@@ -100,8 +104,17 @@ public class FilterLibraryScreen extends Screen {
         }
     }
 
+    private SavedFilter selectedFilter() {
+        if (selectedId == null) return null;
+        for (SavedFilter f : filters) {
+            if (f.id().equals(selectedId)) return f;
+        }
+        return null;
+    }
+
     private void updateButtonStates() {
-        boolean selected = list.getSelected() != null;
+        SavedFilter sel = selectedFilter();
+        boolean selected = sel != null;
         boolean renamingActive = renaming;
         importButton.active = !renamingActive;
         renameButton.active = selected && !renamingActive;
@@ -124,7 +137,7 @@ public class FilterLibraryScreen extends Screen {
     public void render(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
         renderBackground(ms);
         renderBg(ms);
-        list.render(ms, mouseX, mouseY, partialTicks);
+        renderList(ms, mouseX, mouseY, partialTicks);
         super.render(ms, mouseX, mouseY, partialTicks);
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
@@ -144,31 +157,58 @@ public class FilterLibraryScreen extends Screen {
         if (filters.isEmpty() && !renaming) {
             drawCenteredString(ms, font,
                     new TranslatableComponent("vaultfilters.screen.filter_library.empty"),
-                    width / 2, list.getY0() + 20, 0x808080);
+                    width / 2, listTop + 20, 0x808080);
         }
     }
 
-    private void renderBg(PoseStack ms) {
-        int x = (width - GUI_WIDTH) / 2;
-        int y = (height - GUI_HEIGHT) / 2;
+    private void renderList(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
+        int panelHeight = listBottom - listTop;
+        int visibleCount = panelHeight / ROW_HEIGHT;
+        int count = filters.size();
+        int end = Math.min(scrollOffset + visibleCount, count);
 
-        // Interior dark fill
-        fill(ms, x + 3, y + 3, x + GUI_WIDTH - 3, y + GUI_HEIGHT - 3, 0xFF2D2D2D);
+        for (int i = scrollOffset; i < end; i++) {
+            SavedFilter filter = filters.get(i);
+            int rowTop = listTop + (i - scrollOffset) * ROW_HEIGHT;
+            int rowBottom = rowTop + ROW_HEIGHT;
 
-        // Brass frame corners
-        AllGuiTextures.BRASS_FRAME_TL.render(ms, x, y, this);
-        AllGuiTextures.BRASS_FRAME_TR.render(ms, x + GUI_WIDTH - 4, y, this);
-        AllGuiTextures.BRASS_FRAME_BL.render(ms, x, y + GUI_HEIGHT - 4, this);
-        AllGuiTextures.BRASS_FRAME_BR.render(ms, x + GUI_WIDTH - 4, y + GUI_HEIGHT - 4, this);
+            boolean hovering = mouseX >= listLeft && mouseX <= listRight && mouseY >= rowTop && mouseY < rowBottom;
+            boolean isSelected = filter.id().equals(selectedId);
 
-        // Brass frame edges (stretched to fill gaps)
-        UIRenderHelper.drawStretched(ms, x + 4, y, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_TOP);
-        UIRenderHelper.drawStretched(ms, x + 4, y + GUI_HEIGHT - 3, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_BOTTOM);
-        UIRenderHelper.drawStretched(ms, x, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_LEFT);
-        UIRenderHelper.drawStretched(ms, x + GUI_WIDTH - 3, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_RIGHT);
+            if (isSelected) {
+                fill(ms, listLeft, rowTop, listRight, rowBottom, 0x44AAAAAA);
+            } else if (hovering) {
+                fill(ms, listLeft, rowTop, listRight, rowBottom, 0x33FFFFFF);
+            }
 
-        // Gold accent line at the top of the list panel
-        fill(ms, x + 6, y + 17, x + GUI_WIDTH - 6, y + 18, 0xFFC99E3D);
+            font.draw(ms, filter.name(), listLeft + 4, rowTop + 2, 0xFFFFFF);
+
+            String typeLabel = filter.type() == SavedFilterType.ATTRIBUTE_FILTER ? "Attr" : "List";
+            font.draw(ms, typeLabel, listRight - 30, rowTop + 2, 0x808080);
+
+            String timeStr = formatTime(filter.updatedAt());
+            font.draw(ms, timeStr, listLeft + 4, rowTop + 12, 0x606060);
+        }
+    }
+
+    private static String formatTime(long timestamp) {
+        long diff = System.currentTimeMillis() - timestamp;
+        if (diff < 60000) return "just now";
+        if (diff < 3600000) return (diff / 60000) + "m ago";
+        if (diff < 86400000) return (diff / 3600000) + "h ago";
+        return (diff / 86400000) + "d ago";
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (mouseX >= listLeft && mouseX <= listRight && mouseY >= listTop && mouseY <= listBottom) {
+            int panelHeight = listBottom - listTop;
+            int visibleCount = panelHeight / ROW_HEIGHT;
+            int maxOffset = Math.max(0, filters.size() - visibleCount);
+            scrollOffset = (int) Math.max(0, Math.min(maxOffset, scrollOffset - delta));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
@@ -179,9 +219,19 @@ public class FilterLibraryScreen extends Screen {
             }
             return true;
         }
-        if (list.mouseClicked(mouseX, mouseY, button)) {
-            updateButtonStates();
-            return true;
+        if (mouseX >= listLeft && mouseX <= listRight && mouseY >= listTop && mouseY <= listBottom) {
+            int panelHeight = listBottom - listTop;
+            int visibleCount = panelHeight / ROW_HEIGHT;
+            int end = Math.min(scrollOffset + visibleCount, filters.size());
+            for (int i = scrollOffset; i < end; i++) {
+                int rowTop = listTop + (i - scrollOffset) * ROW_HEIGHT;
+                int rowBottom = rowTop + ROW_HEIGHT;
+                if (mouseY >= rowTop && mouseY < rowBottom) {
+                    selectedId = filters.get(i).id();
+                    updateButtonStates();
+                    return true;
+                }
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
@@ -277,9 +327,9 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void onRename() {
-        FilterEntry entry = list.getSelected();
-        if (entry == null) return;
-        beginRename(entry.filter);
+        SavedFilter sel = selectedFilter();
+        if (sel == null) return;
+        beginRename(sel);
     }
 
     private void beginRename(SavedFilter filter) {
@@ -345,9 +395,9 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void onDuplicate() {
-        FilterEntry entry = list.getSelected();
-        if (entry != null) {
-            SavedFilter copy = FilterLibraryStore.duplicate(entry.filter.id());
+        SavedFilter sel = selectedFilter();
+        if (sel != null) {
+            SavedFilter copy = FilterLibraryStore.duplicate(sel.id());
             if (copy != null) {
                 refreshList();
                 setStatus("Duplicated as \"" + copy.name() + "\"");
@@ -356,41 +406,40 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void onExport() {
-        FilterEntry entry = list.getSelected();
-        if (entry == null) return;
-        SavedFilter filter = entry.filter;
+        SavedFilter sel = selectedFilter();
+        if (sel == null) return;
 
         try {
-            String json = FilterUiUtils.PRETTY_GSON.toJson(filter.payload());
+            String json = FilterUiUtils.PRETTY_GSON.toJson(sel.payload());
             Minecraft.getInstance().keyboardHandler.setClipboard(json);
-            setStatus("Exported \"" + filter.name() + "\" to clipboard");
+            setStatus("Exported \"" + sel.name() + "\" to clipboard");
         } catch (Exception e) {
             setStatus("Export failed: " + e.getMessage());
         }
     }
 
     private void onTree() {
-        FilterEntry entry = list.getSelected();
-        if (entry == null) return;
+        SavedFilter sel = selectedFilter();
+        if (sel == null) return;
 
         try {
-            JsonObject obj = entry.filter.payload().deepCopy();
+            JsonObject obj = sel.payload().deepCopy();
             obj.addProperty("format", "tree");
             String json = FilterUiUtils.PRETTY_GSON.toJson(obj);
             Minecraft.getInstance().keyboardHandler.setClipboard(json);
-            setStatus("Exported \"" + entry.filter.name() + "\" tree to clipboard");
+            setStatus("Exported \"" + sel.name() + "\" tree to clipboard");
         } catch (Exception e) {
             setStatus("Tree export failed: " + e.getMessage());
         }
     }
 
     private void onDelete() {
-        FilterEntry entry = list.getSelected();
-        if (entry == null) return;
+        SavedFilter sel = selectedFilter();
+        if (sel == null) return;
 
-        if (!deleteConfirming || deleteTarget == null || !deleteTarget.equals(entry.filter.id())) {
+        if (!deleteConfirming || deleteTarget == null || !deleteTarget.equals(sel.id())) {
             deleteConfirming = true;
-            deleteTarget = entry.filter.id();
+            deleteTarget = sel.id();
             deleteConfirmStart = System.currentTimeMillis();
             updateDeleteButton();
             return;
@@ -405,83 +454,10 @@ public class FilterLibraryScreen extends Screen {
 
     void refreshList() {
         filters = FilterLibraryStore.list();
-        list.clearFilterEntries();
-        for (SavedFilter filter : filters) {
-            list.addFilterEntry(new FilterEntry(this, filter));
-        }
+        int panelHeight = listBottom - listTop;
+        int visibleCount = panelHeight / ROW_HEIGHT;
+        int maxOffset = Math.max(0, filters.size() - visibleCount);
+        if (scrollOffset > maxOffset) scrollOffset = maxOffset;
         updateButtonStates();
-    }
-
-    static class FilterList extends ObjectSelectionList<FilterEntry> {
-        private final FilterLibraryScreen screen;
-
-        public FilterList(FilterLibraryScreen screen, Minecraft mc, int width, int height, int top, int bottom, int itemHeight) {
-            super(mc, width, height, top, bottom, itemHeight);
-            this.screen = screen;
-        }
-
-        @Override
-        protected void renderBackground(PoseStack ms) {
-        }
-
-        public void setRightPos(int right) {
-            this.x1 = right;
-        }
-
-        public void addFilterEntry(FilterEntry entry) {
-            super.addEntry(entry);
-        }
-
-        public void clearFilterEntries() {
-            super.clearEntries();
-        }
-
-        public int getY0() {
-            return this.y0;
-        }
-    }
-
-    static class FilterEntry extends ObjectSelectionList.Entry<FilterEntry> {
-        private final FilterLibraryScreen screen;
-        private final SavedFilter filter;
-
-        public FilterEntry(FilterLibraryScreen screen, SavedFilter filter) {
-            this.screen = screen;
-            this.filter = filter;
-        }
-
-        @Override
-        public void render(PoseStack ms, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTicks) {
-            if (hovering) {
-                fill(ms, left, top, left + width, top + height, 0x33FFFFFF);
-            }
-            screen.font.draw(ms, filter.name(), left + 4, top + 2, 0xFFFFFF);
-
-            String typeLabel = filter.type() == SavedFilterType.ATTRIBUTE_FILTER ? "Attr" : "List";
-            screen.font.draw(ms, typeLabel, left + width - 30, top + 2, 0x808080);
-
-            String timeStr = formatTime(filter.updatedAt());
-            screen.font.draw(ms, timeStr, left + 4, top + 12, 0x606060);
-        }
-
-        private static String formatTime(long timestamp) {
-            long diff = System.currentTimeMillis() - timestamp;
-            if (diff < 60000) return "just now";
-            if (diff < 3600000) return (diff / 60000) + "m ago";
-            if (diff < 86400000) return (diff / 3600000) + "h ago";
-            return (diff / 86400000) + "d ago";
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            screen.list.setSelected(this);
-            screen.updateButtonStates();
-            return true;
-        }
-
-        @Override
-        public Component getNarration() {
-            return new TextComponent(filter.name());
-        }
     }
 }
