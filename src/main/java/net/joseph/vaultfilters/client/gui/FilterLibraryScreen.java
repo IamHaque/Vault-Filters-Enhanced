@@ -84,6 +84,7 @@ public class FilterLibraryScreen extends Screen {
     private boolean actionMenuOpen;
     private UUID actionMenuFilterId;
     private boolean actionMenuDeleteConfirm;
+    private boolean actionMenuDuplicateConfirm;
     private int actionMenuHoveredIndex = -1;
     private int actionMenuHoverTicks;
     private int actionMenuPrevHoverIndex = -1;
@@ -99,7 +100,7 @@ public class FilterLibraryScreen extends Screen {
     private static final int OVERLAY_COLOR = 0xFF000000;
 
     private static final int ACTION_MENU_W = 190;
-    private static final int ACTION_MENU_H = 124;
+    private static final int ACTION_MENU_H = 114;
     private static final int ACTION_ITEM_H = 18;
     private static final int ACTION_COUNT = 5;
     private static final int ACTION_FAV = 0;
@@ -605,11 +606,11 @@ public class FilterLibraryScreen extends Screen {
 
         fill(ms, cx, cy, cx + ACTION_MENU_W, cy + ACTION_MENU_H, 0xFF333333);
 
-        drawCenteredString(ms, font, "Filter Actions", width / 2, cy + 8, 0xFFFFFF);
+        drawCenteredString(ms, font, "Filter Actions", width / 2, cy + 6, 0xFFFFFF);
 
         boolean hoverX = mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
-                && mouseY >= cy + 2 && mouseY <= cy + 12;
-        renderCloseButton(ms, cx + ACTION_MENU_W - 14, cy + 2, hoverX);
+                && mouseY >= cy + 4 && mouseY <= cy + 14;
+        renderCloseButton(ms, cx + ACTION_MENU_W - 14, cy + 4, hoverX);
 
         fill(ms, cx + 4, cy + 18, cx + ACTION_MENU_W - 4, cy + 19, 0xFF555555);
 
@@ -629,34 +630,34 @@ public class FilterLibraryScreen extends Screen {
 
             switch (i) {
                 case ACTION_FAV: {
-                    font.draw(ms, isFav ? "\u2605" : "\u2606", cx + 9, itemY + 3, 0xFFFF55);
-                    font.draw(ms, isFav ? "Unfavorite" : "Favorite", cx + 24, itemY + 3, 0xFFFF55);
+                    font.draw(ms, isFav ? "\u2605" : "\u2606", cx + 9, itemY + 5, 0xFFFF55);
+                    font.draw(ms, isFav ? "Unfavorite" : "Favorite", cx + 24, itemY + 5, 0xFFFF55);
                     break;
                 }
                 case ACTION_REN:
                     AllIcons.I_CONFIG_OPEN.render(ms, cx + 6, itemY + 1);
-                    font.draw(ms, "Rename", cx + 24, itemY + 3, 0xFFFFFF);
+                    font.draw(ms, "Rename", cx + 24, itemY + 5, 0xFFFFFF);
                     break;
-                case ACTION_DUP:
+                case ACTION_DUP: {
                     AllIcons.I_REFRESH.render(ms, cx + 6, itemY + 1);
-                    font.draw(ms, "Duplicate", cx + 24, itemY + 3, 0xFFFFFF);
+                    int dupColor = actionMenuDuplicateConfirm ? 0xFF5555 : 0xFFFFFF;
+                    String dupText = actionMenuDuplicateConfirm ? "Confirm Duplicate" : "Duplicate";
+                    font.draw(ms, dupText, cx + 24, itemY + 5, dupColor);
                     break;
+                }
                 case ACTION_SHR:
-                    font.draw(ms, "\u2192", cx + 9, itemY + 3, 0xFFFFFF);
-                    font.draw(ms, "Share", cx + 24, itemY + 3, 0xFFFFFF);
+                    font.draw(ms, "\u2192", cx + 9, itemY + 5, 0xFFFFFF);
+                    font.draw(ms, "Share", cx + 24, itemY + 5, 0xFFFFFF);
                     break;
                 case ACTION_DEL: {
                     AllIcons.I_TRASH.render(ms, cx + 6, itemY + 1);
                     int delColor = 0xFF5555;
                     String delText = actionMenuDeleteConfirm ? "Confirm Delete" : "Delete";
-                    font.draw(ms, delText, cx + 24, itemY + 3, delColor);
+                    font.draw(ms, delText, cx + 24, itemY + 5, delColor);
                     break;
                 }
             }
         }
-
-        int bottomDividerY = cy + 22 + ACTION_COUNT * ACTION_ITEM_H + 3;
-        fill(ms, cx + 4, bottomDividerY, cx + ACTION_MENU_W - 4, bottomDividerY + 1, 0xFF555555);
     }
 
     private void renderList(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
@@ -936,6 +937,7 @@ public class FilterLibraryScreen extends Screen {
         actionMenuOpen = true;
         actionMenuFilterId = filterId;
         actionMenuDeleteConfirm = false;
+        actionMenuDuplicateConfirm = false;
         actionMenuHoveredIndex = -1;
 
         updateButtonStates();
@@ -945,6 +947,7 @@ public class FilterLibraryScreen extends Screen {
         actionMenuOpen = false;
         actionMenuFilterId = null;
         actionMenuDeleteConfirm = false;
+        actionMenuDuplicateConfirm = false;
         actionMenuHoveredIndex = -1;
         actionMenuHoverTicks = 0;
         updateButtonStates();
@@ -970,12 +973,16 @@ public class FilterLibraryScreen extends Screen {
                 beginRename(sf);
                 break;
             case ACTION_DUP:
-                SavedFilter copy = FilterLibraryStore.duplicate(sf.id());
-                if (copy != null) {
-                    refreshList();
-                    setStatus("Duplicated as \"" + copy.name() + "\"");
+                if (!actionMenuDuplicateConfirm) {
+                    actionMenuDuplicateConfirm = true;
+                } else {
+                    SavedFilter copy = FilterLibraryStore.duplicate(sf.id());
+                    if (copy != null) {
+                        refreshList();
+                        setStatus("Duplicated as \"" + copy.name() + "\"");
+                    }
+                    closeActionMenu();
                 }
-                closeActionMenu();
                 break;
             case ACTION_SHR:
                 enteredFromActionMenu = true;
