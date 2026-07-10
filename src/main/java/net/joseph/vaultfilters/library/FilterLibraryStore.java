@@ -205,6 +205,16 @@ public final class FilterLibraryStore {
         return false;
     }
 
+    public static SavedFilter findByName(SavedFilterType type, String name) {
+        ensureLoaded();
+        for (SavedFilter sf : entries.values()) {
+            if (sf.type() == type && sf.name().equals(name)) {
+                return sf;
+            }
+        }
+        return null;
+    }
+
     public static int count() {
         ensureLoaded();
         return entries.size();
