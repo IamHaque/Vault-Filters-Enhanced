@@ -10,6 +10,7 @@ import java.util.Optional;
 
 @SuppressWarnings("removal")
 public class VFMessages {
+    public static final int MAX_SHARE_SIZE = 51200;
     private static final String PROTOCOL_VERSION = "1";
     public static final SimpleChannel VFCHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(VaultFilters.MOD_ID, "main"),

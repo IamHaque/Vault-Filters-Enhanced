@@ -13,8 +13,6 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public class ShareC2SPacket {
-    private static final int MAX_SHARE_SIZE = 51200;
-
     private final String targetPlayerName;
     private final String filterJson;
 
@@ -25,11 +23,11 @@ public class ShareC2SPacket {
 
     public void encode(FriendlyByteBuf buf) {
         buf.writeUtf(targetPlayerName, 16);
-        buf.writeUtf(filterJson, MAX_SHARE_SIZE);
+        buf.writeUtf(filterJson, VFMessages.MAX_SHARE_SIZE);
     }
 
     public static ShareC2SPacket decode(FriendlyByteBuf buf) {
-        return new ShareC2SPacket(buf.readUtf(16), buf.readUtf(MAX_SHARE_SIZE));
+        return new ShareC2SPacket(buf.readUtf(16), buf.readUtf(VFMessages.MAX_SHARE_SIZE));
     }
 
     public void handle(Supplier<NetworkEvent.Context> contextSupplier) {

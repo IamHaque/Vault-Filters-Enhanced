@@ -16,8 +16,6 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public class ShareS2CPacket {
-    private static final int MAX_SHARE_SIZE = 51200;
-
     private final String senderName;
     private final String filterJson;
 
@@ -28,11 +26,11 @@ public class ShareS2CPacket {
 
     public void encode(FriendlyByteBuf buf) {
         buf.writeUtf(senderName, 16);
-        buf.writeUtf(filterJson, MAX_SHARE_SIZE);
+        buf.writeUtf(filterJson, VFMessages.MAX_SHARE_SIZE);
     }
 
     public static ShareS2CPacket decode(FriendlyByteBuf buf) {
-        return new ShareS2CPacket(buf.readUtf(16), buf.readUtf(MAX_SHARE_SIZE));
+        return new ShareS2CPacket(buf.readUtf(16), buf.readUtf(VFMessages.MAX_SHARE_SIZE));
     }
 
     public void handle(Supplier<NetworkEvent.Context> contextSupplier) {

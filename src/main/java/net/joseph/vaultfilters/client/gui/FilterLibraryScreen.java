@@ -1,7 +1,5 @@
 package net.joseph.vaultfilters.client.gui;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -21,8 +19,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
@@ -93,6 +89,9 @@ public class FilterLibraryScreen extends Screen {
     private int closeY;
     private static final int CLOSE_W = 10;
     private static final int CLOSE_H = 10;
+    private static final int MAX_FILTER_NAME_LENGTH = 35;
+
+    private static final int OVERLAY_COLOR = 0xFF000000;
 
     private static final int ACTION_MENU_W = 190;
     private static final int ACTION_ITEM_H = 18;
@@ -380,6 +379,20 @@ public class FilterLibraryScreen extends Screen {
         importButton.active = !modalActive;
     }
 
+    private void setModalActive(boolean active) {
+        if (applyReplaceButton != null) applyReplaceButton.active = !active;
+        if (applyMergeButton != null) applyMergeButton.active = !active;
+        importButton.active = !active;
+        if (searchBox != null) searchBox.setEditable(!active);
+        sortButton.active = !active;
+        favoritesButton.active = !active;
+        if (showAllButton != null) showAllButton.active = !active;
+    }
+
+    private void renderCloseButton(PoseStack ms, int x, int y, boolean hovered) {
+        font.draw(ms, "\u00d7", x, y, hovered ? 0xFF5555 : 0xAAAAAA);
+    }
+
     private void renderBg(PoseStack ms) {
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
@@ -467,7 +480,7 @@ public class FilterLibraryScreen extends Screen {
             if (!renderHoveredRowId.equals(cachedPreviewId)) {
                 for (SavedFilter f : filters) {
                     if (f.id().equals(renderHoveredRowId)) {
-                        cachedPreviewLines = buildFilterPreviewLines(f);
+                        cachedPreviewLines = FilterLibraryPreviewBuilder.buildPreview(f);
                         cachedPreviewId = renderHoveredRowId;
                         break;
                     }
@@ -481,7 +494,7 @@ public class FilterLibraryScreen extends Screen {
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 6, 0xFFFFFF);
 
         boolean hoveringClose = mouseX >= closeX && mouseX <= closeX + CLOSE_W && mouseY >= closeY && mouseY <= closeY + CLOSE_H;
-        font.draw(ms, "\u00d7", closeX, closeY, hoveringClose ? 0xFF5555 : 0xAAAAAA);
+        renderCloseButton(ms, closeX, closeY, hoveringClose);
 
         if (!anyModal) {
             String showingLabel;
@@ -525,7 +538,7 @@ public class FilterLibraryScreen extends Screen {
     }
 
     private void renderRenameModal(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, 0xFF000000);
+        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
         int rx = (width - 180) / 2;
         int ry = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 20;
         fill(ms, rx - 4, ry - 4, rx + 184, ry + 44, 0xFF333333);
@@ -534,11 +547,11 @@ public class FilterLibraryScreen extends Screen {
                 width / 2, ry + 2, 0xFFFFFF);
 
         boolean hoverX = mouseX >= rx + 178 && mouseX <= rx + 188 && mouseY >= ry - 2 && mouseY <= ry + 8;
-        font.draw(ms, "\u00d7", rx + 178, ry - 2, hoverX ? 0xFF5555 : 0xAAAAAA);
+        renderCloseButton(ms, rx + 178, ry - 2, hoverX);
     }
 
     private void renderShareModal(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, 0xFF000000);
+        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
         int sx = (width - 200) / 2;
         int sy = (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 36;
         fill(ms, sx - 4, sy - 4, sx + 208, sy + 96, 0xFF333333);
@@ -546,11 +559,11 @@ public class FilterLibraryScreen extends Screen {
                 width / 2, sy + 4, 0xFFFFFF);
 
         boolean hoverX = mouseX >= sx + 198 && mouseX <= sx + 208 && mouseY >= sy - 2 && mouseY <= sy + 8;
-        font.draw(ms, "\u00d7", sx + 198, sy - 2, hoverX ? 0xFF5555 : 0xAAAAAA);
+        renderCloseButton(ms, sx + 198, sy - 2, hoverX);
     }
 
     private void renderActionMenu(PoseStack ms, int mouseX, int mouseY) {
-        fill(ms, 0, 0, width, height, 0xFF000000);
+        fill(ms, 0, 0, width, height, OVERLAY_COLOR);
 
         int cx = (width - ACTION_MENU_W) / 2;
         int cy = (height - 172) / 2;
@@ -561,7 +574,7 @@ public class FilterLibraryScreen extends Screen {
 
         boolean hoverX = mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
                 && mouseY >= cy + 2 && mouseY <= cy + 12;
-        font.draw(ms, "\u00d7", cx + ACTION_MENU_W - 14, cy + 2, hoverX ? 0xFF5555 : 0xAAAAAA);
+        renderCloseButton(ms, cx + ACTION_MENU_W - 14, cy + 2, hoverX);
 
         fill(ms, cx + 4, cy + 18, cx + ACTION_MENU_W - 4, cy + 19, 0xFF555555);
 
@@ -649,7 +662,7 @@ public class FilterLibraryScreen extends Screen {
             String typeLabel = filter.type() == SavedFilterType.ATTRIBUTE_FILTER ? "Attr" : "List";
             font.draw(ms, typeLabel, listRight - 30, rowTop + 2, 0x808080);
 
-            String timeStr = formatTime(filter.updatedAt());
+            String timeStr = FilterLibraryPreviewBuilder.formatTime(filter.updatedAt());
             font.draw(ms, timeStr, listLeft + 4, rowTop + 12, 0x606060);
         }
     }
@@ -673,284 +686,6 @@ public class FilterLibraryScreen extends Screen {
         int thumbTop = listTop + (int) ((panelHeight - thumbHeight) * scrollFraction);
 
         fill(ms, trackLeft, thumbTop, trackRight, thumbTop + thumbHeight, 0xAAFFFFFF);
-    }
-
-    private List<Component> buildFilterPreviewLines(SavedFilter sf) {
-        List<Component> lines = new ArrayList<>();
-        JsonObject payload = sf.payload();
-        if (payload == null || !payload.isJsonObject()) {
-            lines.add(new TextComponent("No preview available"));
-            return lines;
-        }
-        if (sf.type() == SavedFilterType.ATTRIBUTE_FILTER) {
-            buildAttributePreview(lines, sf.name(), payload);
-        } else if (sf.type() == SavedFilterType.LIST_FILTER) {
-            buildListPreview(lines, sf.name(), payload);
-        }
-        return lines;
-    }
-
-    private void buildAttributePreview(List<Component> lines, String name, JsonObject root) {
-        lines.add(new TextComponent(name).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-
-        FilterPayloadUtils.AttributeSettings settings = FilterPayloadUtils.readAttributeSettings(root);
-        String mode = FilterPayloadUtils.getModeLabel(settings.blacklist(), settings.matchAll());
-
-        JsonArray array = root.has(FilterUiUtils.ATTRIBUTES_FIELD)
-                && root.get(FilterUiUtils.ATTRIBUTES_FIELD).isJsonArray()
-                ? root.getAsJsonArray(FilterUiUtils.ATTRIBUTES_FIELD) : new JsonArray();
-
-        boolean empty = array.size() == 0;
-        lines.add(new TextComponent("\u251c\u2500 " + mode + (empty ? "" : " (" + array.size()
-                + " attribute" + (array.size() == 1 ? "" : "s") + ")"))
-                .withStyle(ChatFormatting.GOLD));
-
-        if (empty) return;
-
-        List<JsonObject> entries = new ArrayList<>();
-        for (JsonElement elem : array) {
-            if (!elem.isJsonObject()) continue;
-            JsonObject obj = elem.getAsJsonObject();
-            if ((obj.has("nbt") && obj.get("nbt").isJsonPrimitive())
-                    || (obj.has("attribute") && obj.get("attribute").isJsonObject())) {
-                entries.add(obj);
-            }
-        }
-
-        if (entries.isEmpty()) {
-            lines.add(new TextComponent("\u2514\u2500 No readable attributes").withStyle(ChatFormatting.GRAY));
-            return;
-        }
-
-        int maxShow = Math.min(entries.size(), 8);
-        for (int i = 0; i < maxShow; i++) {
-            boolean isLast = (i == maxShow - 1) && entries.size() <= 8;
-            appendAttrLine(lines, entries.get(i), "", isLast);
-        }
-
-        if (entries.size() > 8) {
-            lines.add(new TextComponent("\u2514\u2500 ... (" + (entries.size() - 8) + " more)")
-                    .withStyle(ChatFormatting.GRAY));
-        }
-    }
-
-    private void appendAttrLine(List<Component> lines, JsonObject entry, String prefix, boolean isLast) {
-        JsonElement payload = entry.has("nbt") && entry.get("nbt").isJsonPrimitive()
-                ? entry.get("nbt")
-                : (entry.has("attribute") && entry.get("attribute").isJsonObject()
-                    ? entry.get("attribute") : null);
-        if (payload == null) return;
-
-        boolean inverted = entry.has("inverted") && entry.get("inverted").getAsBoolean();
-        String branch = isLast ? "\u2514\u2500" : "\u251c\u2500";
-
-        try {
-            CompoundTag tag = payload.isJsonPrimitive()
-                    ? TagParser.parseTag(payload.getAsString())
-                    : FilterPayloadUtils.expandFlattenedAttributeCompound(
-                        FilterPayloadUtils.jsonToCompoundTag(payload));
-            FilterUiUtils.TagEntry te = FilterUiUtils.firstSortedDataEntry(tag);
-            String key = te == null ? "?" : te.key();
-            String val = te == null ? "?"
-                    : FilterUiUtils.normalizeAttributeSummary(key, FilterUiUtils.summarizeTag(te.value()));
-
-            String line = prefix + branch + " " + (inverted ? ChatFormatting.RED + "NOT " : "")
-                    + ChatFormatting.WHITE + key + ChatFormatting.GRAY + " = " + ChatFormatting.AQUA + val;
-            lines.add(new TextComponent(line));
-        } catch (Exception e) {
-            lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.RED + "invalid"));
-        }
-    }
-
-    private void addAttrFilterLines(List<Component> lines, JsonObject root, String prefix) {
-        FilterPayloadUtils.AttributeSettings settings = FilterPayloadUtils.readAttributeSettings(root);
-        String mode = FilterPayloadUtils.getModeLabel(settings.blacklist(), settings.matchAll());
-
-        JsonArray array = root.has(FilterUiUtils.ATTRIBUTES_FIELD)
-                && root.get(FilterUiUtils.ATTRIBUTES_FIELD).isJsonArray()
-                ? root.getAsJsonArray(FilterUiUtils.ATTRIBUTES_FIELD) : new JsonArray();
-
-        if (array.size() == 0) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 " + mode + " (0 attributes)").withStyle(ChatFormatting.GRAY));
-            return;
-        }
-
-        List<JsonObject> entries = new ArrayList<>();
-        for (JsonElement elem : array) {
-            if (!elem.isJsonObject()) continue;
-            JsonObject obj = elem.getAsJsonObject();
-            if ((obj.has("nbt") && obj.get("nbt").isJsonPrimitive())
-                    || (obj.has("attribute") && obj.get("attribute").isJsonObject())) {
-                entries.add(obj);
-            }
-        }
-
-        if (entries.isEmpty()) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 " + mode + " (0 readable)").withStyle(ChatFormatting.GRAY));
-            return;
-        }
-
-        boolean hasOverflow = entries.size() > 8;
-        int maxShow = Math.min(entries.size(), 8);
-
-        lines.add(new TextComponent(prefix + "\u251c\u2500 " + mode + " (" + entries.size()
-                + " attribute" + (entries.size() == 1 ? "" : "s") + ")")
-                .withStyle(ChatFormatting.GOLD));
-
-        for (int i = 0; i < maxShow; i++) {
-            boolean isLast = (i == maxShow - 1) && !hasOverflow;
-            appendAttrLine(lines, entries.get(i), prefix, isLast);
-        }
-
-        if (hasOverflow) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 ... (" + (entries.size() - 8) + " more)")
-                    .withStyle(ChatFormatting.GRAY));
-        }
-    }
-
-    private void buildListPreview(List<Component> lines, String name, JsonObject root) {
-        JsonObject filterObj = root.has("filter") && root.get("filter").isJsonObject()
-                ? root.getAsJsonObject("filter") : root;
-
-        FilterPayloadUtils.ListSettings settings = FilterPayloadUtils.readListSettings(filterObj);
-        String mode = FilterPayloadUtils.getModeLabel(settings.blacklist(), settings.matchAll());
-        String nbtPart = settings.respectNBT() ? ", Respect NBT" : "";
-
-        JsonArray itemsArr = filterObj.has("items") && filterObj.get("items").isJsonArray()
-                ? filterObj.getAsJsonArray("items") : new JsonArray();
-
-        List<JsonObject> items = new ArrayList<>();
-        for (JsonElement elem : itemsArr) {
-            if (elem.isJsonObject()) items.add(elem.getAsJsonObject());
-        }
-
-        String header = name + " (" + items.size() + " item" + (items.size() == 1 ? "" : "s") + ")"
-                + (nbtPart.isEmpty() ? "" : " " + nbtPart);
-        lines.add(new TextComponent(header).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-
-        if (items.isEmpty()) {
-            lines.add(new TextComponent("\u2514\u2500 " + mode).withStyle(ChatFormatting.GOLD));
-            return;
-        }
-
-        lines.add(new TextComponent("\u251c\u2500 " + mode).withStyle(ChatFormatting.GOLD));
-        renderListItemTree(lines, items, "");
-    }
-
-    private void renderListItemTree(List<Component> lines, List<JsonObject> items, String prefix) {
-        int maxShow = Math.min(items.size(), 6);
-        boolean hasOverflow = items.size() > 6;
-
-        for (int i = 0; i < maxShow; i++) {
-            JsonObject item = items.get(i);
-            boolean isLastItem = (i == maxShow - 1) && !hasOverflow;
-            String branch = isLastItem ? "\u2514\u2500" : "\u251c\u2500";
-            String contPrefix = prefix + (isLastItem ? "   " : "\u2502  ");
-
-            String type = item.has("type") && item.get("type").isJsonPrimitive()
-                    ? item.get("type").getAsString() : "item_filter";
-
-            if ("attribute_filter".equals(type)) {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "Attribute Filter";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.AQUA + "Attr: " + itemName)
-                        .withStyle(ChatFormatting.AQUA));
-                addAttrFilterLines(lines, item, contPrefix);
-            } else if ("list_filter".equals(type)) {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "List Filter";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.LIGHT_PURPLE + "List: " + itemName)
-                        .withStyle(ChatFormatting.LIGHT_PURPLE));
-                addNestedListLines(lines, item, contPrefix, 1);
-            } else {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "Item";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.WHITE + itemName));
-            }
-        }
-
-        if (hasOverflow) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 ... (" + (items.size() - 6) + " more)")
-                    .withStyle(ChatFormatting.GRAY));
-        }
-    }
-
-    private void addNestedListLines(List<Component> lines, JsonObject root, String prefix, int depth) {
-        if (depth > 3) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 ... (nested)").withStyle(ChatFormatting.GRAY));
-            return;
-        }
-
-        JsonObject filterObj = root.has("filter") && root.get("filter").isJsonObject()
-                ? root.getAsJsonObject("filter") : root;
-
-        FilterPayloadUtils.ListSettings settings = FilterPayloadUtils.readListSettings(filterObj);
-        String mode = FilterPayloadUtils.getModeLabel(settings.blacklist(), settings.matchAll());
-        String nbtPart = settings.respectNBT() ? ", Respect NBT" : "";
-
-        JsonArray itemsArr = filterObj.has("items") && filterObj.get("items").isJsonArray()
-                ? filterObj.getAsJsonArray("items") : new JsonArray();
-
-        List<JsonObject> items = new ArrayList<>();
-        for (JsonElement elem : itemsArr) {
-            if (elem.isJsonObject()) items.add(elem.getAsJsonObject());
-        }
-
-        if (items.isEmpty()) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 " + mode + nbtPart).withStyle(ChatFormatting.GOLD));
-            return;
-        }
-
-        String modeLine = mode + nbtPart;
-        boolean hasOverflow = items.size() > 6;
-        int maxShow = Math.min(items.size(), 6);
-        boolean modeIsLast = maxShow == 0 && !hasOverflow;
-        lines.add(new TextComponent(prefix + (modeIsLast ? "\u2514\u2500" : "\u251c\u2500") + " " + modeLine)
-                .withStyle(ChatFormatting.GOLD));
-
-        for (int i = 0; i < maxShow; i++) {
-            JsonObject item = items.get(i);
-            boolean isLastItem = (i == maxShow - 1) && !hasOverflow;
-            String branch = isLastItem ? "\u2514\u2500" : "\u251c\u2500";
-            String contPrefix = prefix + (isLastItem ? "   " : "\u2502  ");
-
-            String type = item.has("type") && item.get("type").isJsonPrimitive()
-                    ? item.get("type").getAsString() : "item_filter";
-
-            if ("attribute_filter".equals(type)) {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "Attribute Filter";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.AQUA + "Attr: " + itemName)
-                        .withStyle(ChatFormatting.AQUA));
-                addAttrFilterLines(lines, item, contPrefix);
-            } else if ("list_filter".equals(type)) {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "List Filter";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.LIGHT_PURPLE + "List: " + itemName)
-                        .withStyle(ChatFormatting.LIGHT_PURPLE));
-                addNestedListLines(lines, item, contPrefix, depth + 1);
-            } else {
-                String itemName = item.has("name") && item.get("name").isJsonPrimitive()
-                        ? item.get("name").getAsString() : "Item";
-                lines.add(new TextComponent(prefix + branch + " " + ChatFormatting.WHITE + itemName));
-            }
-        }
-
-        if (hasOverflow) {
-            lines.add(new TextComponent(prefix + "\u2514\u2500 ... (" + (items.size() - 6) + " more)")
-                    .withStyle(ChatFormatting.GRAY));
-        }
-    }
-
-    private static String formatTime(long timestamp) {
-        long diff = System.currentTimeMillis() - timestamp;
-        if (diff < 60000)
-            return "just now";
-        if (diff < 3600000)
-            return (diff / 60000) + "m ago";
-        if (diff < 86400000)
-            return (diff / 3600000) + "h ago";
-        return (diff / 86400000) + "d ago";
     }
 
     @Override
@@ -1304,8 +1039,8 @@ public class FilterLibraryScreen extends Screen {
             String name = obj.has("name") && obj.get("name").isJsonPrimitive()
                     ? obj.get("name").getAsString()
                     : "Imported Filter";
-            if (name.length() > 35)
-                name = name.substring(0, 35);
+            if (name.length() > MAX_FILTER_NAME_LENGTH)
+                name = name.substring(0, MAX_FILTER_NAME_LENGTH);
 
             if (!FilterLibraryStore.canAddMore()) {
                 setStatus("Library is full (" + FilterLibraryStore.MAX_LIBRARY_ENTRIES + " max)");
@@ -1333,7 +1068,7 @@ public class FilterLibraryScreen extends Screen {
         renameTarget = filter;
         renameBox = new EditBox(font, (width - 176) / 2, (height - GUI_HEIGHT) / 2 + GUI_HEIGHT / 2 - 16, 176, 16,
                 new TextComponent(""));
-        renameBox.setMaxLength(35);
+        renameBox.setMaxLength(MAX_FILTER_NAME_LENGTH);
         renameBox.setValue(filter.name());
         renameBox.changeFocus(true);
         renameBox.setHighlightPos(filter.name().length());
@@ -1347,13 +1082,7 @@ public class FilterLibraryScreen extends Screen {
         renameCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
                 new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelRename()));
 
-        if (applyReplaceButton != null) applyReplaceButton.active = false;
-        if (applyMergeButton != null) applyMergeButton.active = false;
-        importButton.active = false;
-        if (searchBox != null) searchBox.setEditable(false);
-        sortButton.active = false;
-        favoritesButton.active = false;
-        if (showAllButton != null) showAllButton.active = false;
+        setModalActive(true);
     }
 
     private void confirmRename() {
@@ -1362,7 +1091,7 @@ public class FilterLibraryScreen extends Screen {
         if (newName == null || newName.isBlank()) {
             newName = renameTarget.name();
         }
-        if (newName.length() > 35) newName = newName.substring(0, 35);
+        if (newName.length() > MAX_FILTER_NAME_LENGTH) newName = newName.substring(0, MAX_FILTER_NAME_LENGTH);
         FilterLibraryStore.rename(renameTarget.id(), newName);
         cleanupRename();
         refreshList();
@@ -1389,10 +1118,7 @@ public class FilterLibraryScreen extends Screen {
             removeWidget(renameCancelButton);
             renameCancelButton = null;
         }
-        if (searchBox != null) searchBox.setEditable(true);
-        sortButton.active = true;
-        favoritesButton.active = true;
-        if (showAllButton != null) showAllButton.active = true;
+        setModalActive(false);
         setFocused(null);
     }
 
@@ -1479,13 +1205,7 @@ public class FilterLibraryScreen extends Screen {
         shareCancelButton = addRenderableWidget(new Button(cx + 42, y, 38, 16,
                 new TranslatableComponent("vaultfilters.gui.library.rename.cancel"), b -> cancelShare()));
 
-        if (applyReplaceButton != null) applyReplaceButton.active = false;
-        if (applyMergeButton != null) applyMergeButton.active = false;
-        importButton.active = false;
-        if (searchBox != null) searchBox.setEditable(false);
-        sortButton.active = false;
-        favoritesButton.active = false;
-        if (showAllButton != null) showAllButton.active = false;
+        setModalActive(true);
     }
 
     private void confirmShare() {
@@ -1531,10 +1251,7 @@ public class FilterLibraryScreen extends Screen {
             removeWidget(shareCancelButton);
             shareCancelButton = null;
         }
-        if (searchBox != null) searchBox.setEditable(true);
-        sortButton.active = true;
-        favoritesButton.active = true;
-        if (showAllButton != null) showAllButton.active = true;
+        setModalActive(false);
         setFocused(null);
     }
 
