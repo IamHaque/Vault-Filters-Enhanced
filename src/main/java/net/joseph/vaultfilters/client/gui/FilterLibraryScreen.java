@@ -3,6 +3,8 @@ package net.joseph.vaultfilters.client.gui;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.simibubi.create.foundation.gui.AllGuiTextures;
+import com.simibubi.create.foundation.gui.UIRenderHelper;
 import net.joseph.vaultfilters.library.FilterLibraryStore;
 import net.joseph.vaultfilters.library.SavedFilter;
 import net.joseph.vaultfilters.library.SavedFilterType;
@@ -150,13 +152,24 @@ public class FilterLibraryScreen extends Screen {
     private void renderBg(PoseStack ms) {
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
-        int border = 4;
 
-        fill(ms, x, y, x + GUI_WIDTH, y + border, 0xFF999999);
-        fill(ms, x, y + GUI_HEIGHT - border, x + GUI_WIDTH, y + GUI_HEIGHT, 0xFF999999);
-        fill(ms, x, y + border, x + border, y + GUI_HEIGHT - border, 0xFF999999);
-        fill(ms, x + GUI_WIDTH - border, y + border, x + GUI_WIDTH, y + GUI_HEIGHT - border, 0xFF999999);
-        fill(ms, x + border, y + border, x + GUI_WIDTH - border, y + GUI_HEIGHT - border, 0xFF2D2D2D);
+        // Interior dark fill
+        fill(ms, x + 3, y + 3, x + GUI_WIDTH - 3, y + GUI_HEIGHT - 3, 0xFF2D2D2D);
+
+        // Brass frame corners
+        AllGuiTextures.BRASS_FRAME_TL.render(ms, x, y, this);
+        AllGuiTextures.BRASS_FRAME_TR.render(ms, x + GUI_WIDTH - 4, y, this);
+        AllGuiTextures.BRASS_FRAME_BL.render(ms, x, y + GUI_HEIGHT - 4, this);
+        AllGuiTextures.BRASS_FRAME_BR.render(ms, x + GUI_WIDTH - 4, y + GUI_HEIGHT - 4, this);
+
+        // Brass frame edges (stretched to fill gaps)
+        UIRenderHelper.drawStretched(ms, x + 4, y, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_TOP);
+        UIRenderHelper.drawStretched(ms, x + 4, y + GUI_HEIGHT - 3, GUI_WIDTH - 8, 3, 0, AllGuiTextures.BRASS_FRAME_BOTTOM);
+        UIRenderHelper.drawStretched(ms, x, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_LEFT);
+        UIRenderHelper.drawStretched(ms, x + GUI_WIDTH - 3, y + 4, 3, GUI_HEIGHT - 8, 0, AllGuiTextures.BRASS_FRAME_RIGHT);
+
+        // Gold accent line at the top of the list panel
+        fill(ms, x + 6, y + 17, x + GUI_WIDTH - 6, y + 18, 0xFFC99E3D);
     }
 
     @Override
