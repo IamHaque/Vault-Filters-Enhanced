@@ -326,6 +326,22 @@ public class FilterLibraryScreen extends Screen {
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
 
+        String showingLabel;
+        if (showOtherType) {
+            showingLabel = "Showing: All";
+        } else if (contextType == SavedFilterType.ATTRIBUTE_FILTER) {
+            showingLabel = "Showing: Attribute Filters";
+        } else if (contextType == SavedFilterType.LIST_FILTER) {
+            showingLabel = "Showing: List Filters";
+        } else {
+            showingLabel = "Showing: All";
+        }
+        String countLabel = filters.size() + "/" + FilterLibraryStore.MAX_LIBRARY_ENTRIES;
+        int panelX = (width - GUI_WIDTH) / 2;
+        int panelY = (height - GUI_HEIGHT) / 2;
+        font.draw(ms, showingLabel, panelX + 10, panelY + 14, 0xC0C0C0);
+        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 14, 0x808080);
+
         if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
             font.draw(ms, new TranslatableComponent("vaultfilters.gui.library.search"),
                     searchBox.x + 2, searchBox.y + 1, 0x606060);
@@ -419,6 +435,7 @@ public class FilterLibraryScreen extends Screen {
                 int rowTop = listTop + (i - scrollOffset) * ROW_HEIGHT;
                 int rowBottom = rowTop + ROW_HEIGHT;
                 if (mouseY >= rowTop && mouseY < rowBottom) {
+                    if (searchBox != null) searchBox.changeFocus(false);
                     selectedId = filters.get(i).id();
                     updateButtonStates();
                     return true;
@@ -564,6 +581,9 @@ public class FilterLibraryScreen extends Screen {
         exportButton.active = false;
         treeButton.active = false;
         deleteButton.active = false;
+        if (searchBox != null) searchBox.setEditable(false);
+        sortButton.active = false;
+        if (showAllButton != null) showAllButton.active = false;
     }
 
     private void confirmRename() {
@@ -599,6 +619,9 @@ public class FilterLibraryScreen extends Screen {
             removeWidget(renameCancelButton);
             renameCancelButton = null;
         }
+        if (searchBox != null) searchBox.setEditable(true);
+        sortButton.active = true;
+        if (showAllButton != null) showAllButton.active = true;
         setFocused(null);
     }
 
