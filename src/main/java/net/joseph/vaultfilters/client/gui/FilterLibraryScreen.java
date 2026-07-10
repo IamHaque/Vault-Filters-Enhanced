@@ -87,7 +87,8 @@ public class FilterLibraryScreen extends Screen {
     private int actionMenuHoveredIndex = -1;
     private int actionMenuHoverTicks;
     private int actionMenuPrevHoverIndex = -1;
-    private Button actionCancelButton;
+    private boolean enteredFromActionMenu;
+    private UUID actionMenuReturnFilterId;
 
     private int closeX;
     private int closeY;
@@ -98,6 +99,7 @@ public class FilterLibraryScreen extends Screen {
     private static final int OVERLAY_COLOR = 0xFF000000;
 
     private static final int ACTION_MENU_W = 190;
+    private static final int ACTION_MENU_H = 124;
     private static final int ACTION_ITEM_H = 18;
     private static final int ACTION_COUNT = 5;
     private static final int ACTION_FAV = 0;
@@ -441,6 +443,8 @@ public class FilterLibraryScreen extends Screen {
         renderBackground(ms);
         renderBg(ms);
 
+        super.render(ms, mouseX, mouseY, partialTicks);
+
         boolean anyModal = renaming || sharing || actionMenuOpen;
 
         if (renaming) {
@@ -452,8 +456,6 @@ public class FilterLibraryScreen extends Screen {
         if (actionMenuOpen) {
             renderActionMenu(ms, mouseX, mouseY);
         }
-
-        super.render(ms, mouseX, mouseY, partialTicks);
 
         if (renaming && renameBox != null) {
             renameBox.render(ms, mouseX, mouseY, partialTicks);
@@ -599,11 +601,15 @@ public class FilterLibraryScreen extends Screen {
         fill(ms, listLeft, listTop, listRight, listBottom, OVERLAY_COLOR);
 
         int cx = (width - ACTION_MENU_W) / 2;
-        int cy = (height - 172) / 2;
+        int cy = (height - ACTION_MENU_H) / 2;
 
-        fill(ms, cx, cy, cx + ACTION_MENU_W, cy + 172, 0xFF333333);
+        fill(ms, cx, cy, cx + ACTION_MENU_W, cy + ACTION_MENU_H, 0xFF333333);
 
         drawCenteredString(ms, font, "Filter Actions", width / 2, cy + 8, 0xFFFFFF);
+
+        boolean hoverX = mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
+                && mouseY >= cy + 2 && mouseY <= cy + 12;
+        renderCloseButton(ms, cx + ACTION_MENU_W - 14, cy + 2, hoverX);
 
         fill(ms, cx + 4, cy + 18, cx + ACTION_MENU_W - 4, cy + 19, 0xFF555555);
 
@@ -772,9 +778,15 @@ public class FilterLibraryScreen extends Screen {
         if (actionMenuOpen) {
             if (button == 0) {
                 int cx = (width - ACTION_MENU_W) / 2;
-                int cy = (height - 172) / 2;
+                int cy = (height - ACTION_MENU_H) / 2;
 
-                boolean inPanel = mouseX >= cx && mouseX <= cx + ACTION_MENU_W && mouseY >= cy && mouseY <= cy + 172;
+                boolean inPanel = mouseX >= cx && mouseX <= cx + ACTION_MENU_W && mouseY >= cy && mouseY <= cy + ACTION_MENU_H;
+
+                if (mouseX >= cx + ACTION_MENU_W - 14 && mouseX <= cx + ACTION_MENU_W - 4
+                        && mouseY >= cy + 2 && mouseY <= cy + 12) {
+                    closeActionMenu();
+                    return true;
+                }
 
                 if (inPanel) {
                     int itemY = cy + 22;
@@ -784,13 +796,6 @@ public class FilterLibraryScreen extends Screen {
                             return true;
                         }
                         itemY += ACTION_ITEM_H;
-                    }
-
-                    int cancelY = cy + 136;
-                    int cancelCX = cx + (ACTION_MENU_W - 80) / 2;
-                    if (mouseX >= cancelCX && mouseX <= cancelCX + 80 && mouseY >= cancelY && mouseY <= cancelY + 16) {
-                        closeActionMenu();
-                        return true;
                     }
                     return true;
                 }
@@ -933,12 +938,6 @@ public class FilterLibraryScreen extends Screen {
         actionMenuDeleteConfirm = false;
         actionMenuHoveredIndex = -1;
 
-        int cx = (width - ACTION_MENU_W) / 2;
-        int cy = (height - 172) / 2;
-        int cancelCX = cx + (ACTION_MENU_W - 80) / 2;
-        actionCancelButton = addRenderableWidget(new Button(cancelCX, cy + 136, 80, 16,
-                new TranslatableComponent("vaultfilters.gui.library.close"), b -> closeActionMenu()));
-
         updateButtonStates();
     }
 
@@ -947,10 +946,7 @@ public class FilterLibraryScreen extends Screen {
         actionMenuFilterId = null;
         actionMenuDeleteConfirm = false;
         actionMenuHoveredIndex = -1;
-        if (actionCancelButton != null) {
-            removeWidget(actionCancelButton);
-            actionCancelButton = null;
-        }
+        actionMenuHoverTicks = 0;
         updateButtonStates();
     }
 
@@ -968,6 +964,8 @@ public class FilterLibraryScreen extends Screen {
                 closeActionMenu();
                 break;
             case ACTION_REN:
+                enteredFromActionMenu = true;
+                actionMenuReturnFilterId = sf.id();
                 closeActionMenu();
                 beginRename(sf);
                 break;
@@ -980,6 +978,8 @@ public class FilterLibraryScreen extends Screen {
                 closeActionMenu();
                 break;
             case ACTION_SHR:
+                enteredFromActionMenu = true;
+                actionMenuReturnFilterId = sf.id();
                 closeActionMenu();
                 beginShare(sf);
                 break;
@@ -1095,14 +1095,24 @@ public class FilterLibraryScreen extends Screen {
         }
         if (newName.length() > MAX_FILTER_NAME_LENGTH) newName = newName.substring(0, MAX_FILTER_NAME_LENGTH);
         FilterLibraryStore.rename(renameTarget.id(), newName);
+        enteredFromActionMenu = false;
+        actionMenuReturnFilterId = null;
         cleanupRename();
         refreshList();
         setStatus("Renamed to \"" + newName + "\"");
     }
 
     private void cancelRename() {
+        boolean wasFromAction = enteredFromActionMenu;
+        UUID returnId = actionMenuReturnFilterId;
+        enteredFromActionMenu = false;
+        actionMenuReturnFilterId = null;
         cleanupRename();
-        updateButtonStates();
+        if (wasFromAction && returnId != null) {
+            openActionMenu(returnId);
+        } else {
+            updateButtonStates();
+        }
     }
 
     private void cleanupRename() {
@@ -1226,13 +1236,23 @@ public class FilterLibraryScreen extends Screen {
         String filterJson = FilterUiUtils.PRETTY_GSON.toJson(sel.toEntryJson());
         VFMessages.VFCHANNEL.sendToServer(new ShareC2SPacket(targetName, filterJson));
 
+        enteredFromActionMenu = false;
+        actionMenuReturnFilterId = null;
         cleanupShare();
         setStatus("Sent \"" + sel.name() + "\" to " + targetName);
     }
 
     private void cancelShare() {
+        boolean wasFromAction = enteredFromActionMenu;
+        UUID returnId = actionMenuReturnFilterId;
+        enteredFromActionMenu = false;
+        actionMenuReturnFilterId = null;
         cleanupShare();
-        updateButtonStates();
+        if (wasFromAction && returnId != null) {
+            openActionMenu(returnId);
+        } else {
+            updateButtonStates();
+        }
     }
 
     private void cleanupShare() {
