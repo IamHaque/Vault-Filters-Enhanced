@@ -599,6 +599,7 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
             String name = FilterUiUtils.getCurrentFilterName((AbstractFilterMenu) this.menu);
             if (name == null || name.isBlank()) name = "Attribute Filter";
             if (name.length() > 35) name = name.substring(0, 35);
+            String capturedName = name;
 
             SavedFilter existing = FilterLibraryStore.findByName(SavedFilterType.ATTRIBUTE_FILTER, name);
             if (existing != null) {
@@ -610,12 +611,12 @@ public abstract class MixinAttributeFilterScreen extends AbstractFilterScreen<At
                                 capturedExisting.setPayload(capturedPayload).touch();
                                 FilterLibraryStore.upsert(capturedExisting);
                                 vault_Filters$loadedLibraryId = capturedExisting.id();
-                                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", name).withStyle(ChatFormatting.GREEN));
+                                FilterUiUtils.notifyUser(new TranslatableComponent("vaultfilters.gui.library.saved", capturedName).withStyle(ChatFormatting.GREEN));
                             }
                             Minecraft.getInstance().setScreen((Screen) this);
                         },
                         new TranslatableComponent("vaultfilters.gui.library.overwrite.title"),
-                        new TranslatableComponent("vaultfilters.gui.library.overwrite.message", name)
+                        new TranslatableComponent("vaultfilters.gui.library.overwrite.message", capturedName)
                 ));
                 return;
             }

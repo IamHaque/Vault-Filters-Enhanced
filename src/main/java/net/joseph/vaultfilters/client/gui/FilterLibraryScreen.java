@@ -233,6 +233,7 @@ public class FilterLibraryScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
+        if (searchBox != null) searchBox.tick();
         if (deleteConfirming && System.currentTimeMillis() - deleteConfirmStart > 5000) {
             deleteConfirming = false;
             deleteTarget = null;
@@ -277,10 +278,8 @@ public class FilterLibraryScreen extends Screen {
 
     @Override
     public void render(PoseStack ms, int mouseX, int mouseY, float partialTicks) {
-        renderBackground(ms);
-        renderBg(ms);
-        renderList(ms, mouseX, mouseY, partialTicks);
         super.render(ms, mouseX, mouseY, partialTicks);
+        renderList(ms, mouseX, mouseY, partialTicks);
 
         drawCenteredString(ms, font, title, width / 2, (height - GUI_HEIGHT) / 2 + 5, 0xFFFFFF);
 
