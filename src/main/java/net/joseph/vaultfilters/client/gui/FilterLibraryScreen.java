@@ -339,8 +339,8 @@ public class FilterLibraryScreen extends Screen {
         String countLabel = filters.size() + "/" + FilterLibraryStore.MAX_LIBRARY_ENTRIES;
         int panelX = (width - GUI_WIDTH) / 2;
         int panelY = (height - GUI_HEIGHT) / 2;
-        font.draw(ms, showingLabel, panelX + 10, panelY + 14, 0xC0C0C0);
-        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 14, 0x808080);
+        font.draw(ms, showingLabel, panelX + 10, panelY + 33, 0xC0C0C0);
+        font.draw(ms, countLabel, panelX + GUI_WIDTH - 10 - font.width(countLabel), panelY + 33, 0x808080);
 
         if (searchBox != null && searchBox.getValue().isEmpty() && !searchBox.isFocused()) {
             font.draw(ms, new TranslatableComponent("vaultfilters.gui.library.search"),
@@ -543,7 +543,7 @@ public class FilterLibraryScreen extends Screen {
             SavedFilter filter = SavedFilter.createNew(savedType, name, obj);
             FilterLibraryStore.upsert(filter);
             refreshList();
-            setStatus("Imported as \"" + name + "\"");
+            setStatus("Imported " + (savedType == SavedFilterType.ATTRIBUTE_FILTER ? "Attribute Filter" : "List Filter") + " \"" + name + "\"");
         } catch (Exception e) {
             setStatus("Invalid clipboard data: " + e.getMessage());
         }
