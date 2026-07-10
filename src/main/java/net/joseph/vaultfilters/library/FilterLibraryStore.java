@@ -180,8 +180,8 @@ public final class FilterLibraryStore {
         if (original == null) return null;
 
         String dupName = original.name();
-        if (dupName.length() > 30) {
-            dupName = dupName.substring(0, 30);
+        if (dupName.length() > 28) {
+            dupName = dupName.substring(0, 28);
         }
         dupName = dupName + " (Copy)";
 
