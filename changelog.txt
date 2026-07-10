@@ -1,0 +1,7 @@
+Filter Library  -  Save and manage filters persistently
+  - Save button on Attribute Filter and List Filter GUIs stores to config/vaultfilters/saved_filters.json
+  - Dedicated Filter Library screen with list, rename, duplicate, export, tree, delete
+  - Clipboard import into library, export from library to clipboard
+  - Auto-save updates existing library entries when filter was loaded from library
+  - Brass-frame visual styling matching Create/VH filter screens
+  - Max 500 entries, 35-char names, atomic file writes, corrupt-file resilience

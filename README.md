@@ -126,6 +126,7 @@ But you can of course choose different parameters during selection in the filter
 - The attribute filter now requires gold nuggets instead of brass nuggets to craft.
 - Attribute filters now support **Tree / Import / Export / Export Available** actions directly in the filter UI.
 - List filters now support **Tree / Import / Export** actions in their UI.
+- **Filter Library** — Save filters to a persistent local library, browse/manage them from a dedicated screen with Import, Rename, Duplicate, Export, Tree, and Delete actions.
 
 ## Attribute Filter Import / Export
 
@@ -257,6 +258,29 @@ Compact export notes:
 - Nested structure (`type`, list options, and `items`) remains the source of truth for list filters.
 - Tree output uses spaced `=` formatting for readability and strips duplicated key prefixes (for example `gear_rarity = Unique` instead of `gear_rarity = gear_rarity=Unique`).
 - Tree roundtrip guidance is documented in `docs/FILTER_TREE_ROUNDTRIP_PLAYBOOK.md`.
+
+## Filter Library
+
+Save and manage filters persistently without relying on clipboard roundtrips. A **Save** button on both filter GUIs writes the current filter to a local JSON file (`config/vaultfilters/saved_filters.json`). A **Library** button opens a dedicated screen listing all saved entries.
+
+### Screen actions
+
+- **Import**: Reads filter JSON from your clipboard and adds it to the library.
+- **Rename**: Changes the saved filter's name (max 35 characters).
+- **Duplicate**: Creates a copy of the selected filter with "(Copy)" appended.
+- **Export**: Copies the saved filter payload to your clipboard as pretty-printed JSON.
+- **Tree**: Copies a tree-view representation of the filter to your clipboard.
+- **Delete**: Two-step delete — first click arms the button, second click confirms. Arms auto-reset after 5 seconds.
+
+### Save behavior
+
+- If the currently open filter was loaded from a library entry, **Save** updates that entry in place.
+- Otherwise, **Save** creates a new library entry using the filter's current display name as the entry name.
+
+### Persistent storage
+
+- Library data is stored client-side in `config/vaultfilters/saved_filters.json`.
+- Atomic write safety (tmp + rename), max 500 entries per library, 35-character name limit, corrupt files are treated as empty with a warning — your data is never silently overwritten.
 
 Due to these changes and the compatibility additions, create is no longer a requirement to use this mod.
 
