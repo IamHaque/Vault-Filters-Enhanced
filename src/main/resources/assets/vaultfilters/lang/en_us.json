@@ -408,7 +408,7 @@
   "vaultfilters.screen.filter_library": "Filter Library",
   "vaultfilters.screen.filter_library.empty": "No saved filters",
 
-  "vaultfilters.gui.library.import": "Imp",
+  "vaultfilters.gui.library.import": "Import",
   "vaultfilters.gui.library.rename": "Ren",
   "vaultfilters.gui.library.duplicate": "Dup",
   "vaultfilters.gui.library.export": "Exp",
@@ -419,6 +419,7 @@
   "vaultfilters.gui.library.share.title": "Share Filter",
   "vaultfilters.gui.library.share.confirm": "Send",
 
+  "vaultfilters.gui.library.rename.title": "Rename Filter",
   "vaultfilters.gui.library.rename.confirm": "OK",
   "vaultfilters.gui.library.rename.cancel": "X",
 
